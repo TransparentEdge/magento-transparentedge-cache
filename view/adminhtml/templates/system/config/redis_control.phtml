@@ -1,0 +1,243 @@
+<?php
+/**
+ * @var \TransparentEdge\CDN\Block\Adminhtml\System\Config\RedisControl $block
+ */
+$manageUrl = $block->getManageUrl();
+$status = $block->getRedisStatus();
+?>
+
+<div id="te-redis-panel" style="background: #f8fafc; border: 1px solid #E2E2E2; border-radius: 8px; padding: 24px; font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;">
+
+    <!-- Detection -->
+    <div style="margin-bottom: 20px;">
+        <h4 style="color: #002643; margin: 0 0 12px; font-size: 15px;"><?= $block->escapeHtml(__('Redis Connection')) ?></h4>
+        <div style="display: flex; gap: 8px; align-items: end; flex-wrap: wrap;">
+            <div>
+                <label style="font-size: 12px; color: #5a6a7e; display: block; margin-bottom: 4px;"><?= $block->escapeHtml(__('Host')) ?></label>
+                <input type="text" id="te-redis-host" value="127.0.0.1" style="padding: 8px 10px; border: 1px solid #d1d9e0; border-radius: 6px; font-size: 13px; width: 160px;"/>
+            </div>
+            <div>
+                <label style="font-size: 12px; color: #5a6a7e; display: block; margin-bottom: 4px;"><?= $block->escapeHtml(__('Port')) ?></label>
+                <input type="text" id="te-redis-port" value="6379" style="padding: 8px 10px; border: 1px solid #d1d9e0; border-radius: 6px; font-size: 13px; width: 70px;"/>
+            </div>
+            <div>
+                <label style="font-size: 12px; color: #5a6a7e; display: block; margin-bottom: 4px;"><?= $block->escapeHtml(__('Password')) ?></label>
+                <input type="password" id="te-redis-password" value="" placeholder="<?= $block->escapeHtml(__('(optional)')) ?>" style="padding: 8px 10px; border: 1px solid #d1d9e0; border-radius: 6px; font-size: 13px; width: 140px;"/>
+            </div>
+            <button type="button" id="te-redis-detect" style="padding: 8px 18px; background: #00A5A6; color: #fff; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;">
+                <?= $block->escapeHtml(__('Detect')) ?>
+            </button>
+        </div>
+        <div id="te-redis-detect-result" style="margin-top: 10px; font-size: 13px; display: none;"></div>
+    </div>
+
+    <!-- Status & Toggles -->
+    <div id="te-redis-backends" style="border-top: 1px solid #E2E2E2; padding-top: 16px;">
+        <h4 style="color: #002643; margin: 0 0 12px; font-size: 15px;"><?= $block->escapeHtml(__('Backends')) ?></h4>
+
+        <!-- Cache -->
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #F0F4F8;">
+            <div>
+                <div style="font-size: 14px; font-weight: 600; color: #002643;"><?= $block->escapeHtml(__('Object Cache')) ?></div>
+                <div id="te-redis-cache-info" style="font-size: 12px; color: #5a6a7e; margin-top: 2px;">
+                    <?= $block->escapeHtml($status['details']['cache'] ?? __('Unknown')) ?>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span id="te-redis-cache-badge" style="font-size: 11px; padding: 2px 8px; border-radius: 10px; <?= $status['cache'] ? 'background:#edfdf5;color:#0a6e3f;' : 'background:#f3f4f6;color:#6b7280;' ?>">
+                    <?= $status['cache'] ? 'Redis' : $block->escapeHtml(__('Files')) ?>
+                </span>
+                <button type="button" class="te-redis-toggle" data-type="cache"
+                        style="padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
+                               <?= $status['cache'] ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca;' : 'background:#002643;color:#fff;border:1px solid #002643;' ?>">
+                    <?= $status['cache'] ? $block->escapeHtml(__('Disable')) : $block->escapeHtml(__('Enable')) ?>
+                </button>
+            </div>
+        </div>
+
+        <!-- FPC -->
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #F0F4F8;">
+            <div>
+                <div style="font-size: 14px; font-weight: 600; color: #002643;"><?= $block->escapeHtml(__('Full Page Cache (FPC)')) ?></div>
+                <div id="te-redis-fpc-info" style="font-size: 12px; color: #5a6a7e; margin-top: 2px;">
+                    <?= $block->escapeHtml($status['details']['fpc'] ?? __('Unknown')) ?>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span id="te-redis-fpc-badge" style="font-size: 11px; padding: 2px 8px; border-radius: 10px; <?= $status['fpc'] ? 'background:#edfdf5;color:#0a6e3f;' : 'background:#f3f4f6;color:#6b7280;' ?>">
+                    <?= $status['fpc'] ? 'Redis' : $block->escapeHtml(__('Files')) ?>
+                </span>
+                <button type="button" class="te-redis-toggle" data-type="fpc"
+                        style="padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
+                               <?= $status['fpc'] ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca;' : 'background:#002643;color:#fff;border:1px solid #002643;' ?>">
+                    <?= $status['fpc'] ? $block->escapeHtml(__('Disable')) : $block->escapeHtml(__('Enable')) ?>
+                </button>
+            </div>
+        </div>
+
+        <!-- Sessions -->
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0;">
+            <div>
+                <div style="font-size: 14px; font-weight: 600; color: #002643;"><?= $block->escapeHtml(__('Sessions')) ?></div>
+                <div id="te-redis-session-info" style="font-size: 12px; color: #5a6a7e; margin-top: 2px;">
+                    <?= $block->escapeHtml($status['details']['session'] ?? __('Unknown')) ?>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span id="te-redis-session-badge" style="font-size: 11px; padding: 2px 8px; border-radius: 10px; <?= $status['session'] ? 'background:#edfdf5;color:#0a6e3f;' : 'background:#f3f4f6;color:#6b7280;' ?>">
+                    <?= $status['session'] ? 'Redis' : $block->escapeHtml(__('Files')) ?>
+                </span>
+                <button type="button" class="te-redis-toggle" data-type="session"
+                        style="padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
+                               <?= $status['session'] ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca;' : 'background:#002643;color:#fff;border:1px solid #002643;' ?>">
+                    <?= $status['session'] ? $block->escapeHtml(__('Disable')) : $block->escapeHtml(__('Enable')) ?>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rollback -->
+    <div style="border-top: 1px solid #E2E2E2; padding-top: 12px; margin-top: 12px; text-align: right;">
+        <button type="button" id="te-redis-rollback"
+                style="padding: 6px 14px; background: transparent; color: #991b1b; border: 1px solid #fecaca; border-radius: 6px; font-size: 12px; cursor: pointer;">
+            ↩ <?= $block->escapeHtml(__('Rollback env.php')) ?>
+        </button>
+    </div>
+</div>
+
+<script type="text/javascript">
+require(['jquery'], function ($) {
+    'use strict';
+
+    var manageUrl = '<?= $block->escapeJs($manageUrl) ?>';
+    var detectedHost = '';
+    var detectedPort = 6379;
+    var detectedPassword = '';
+    var recommendedDbs = {cache: 0, fpc: 2, session: 3};
+
+    // Translated strings for JS
+    var i18n = {
+        detect: '<?= $block->escapeJs(__('Detect')) ?>',
+        detecting: '<?= $block->escapeJs(__('Detecting...')) ?>',
+        enable: '<?= $block->escapeJs(__('Enable')) ?>',
+        disable: '<?= $block->escapeJs(__('Disable')) ?>',
+        files: '<?= $block->escapeJs(__('Files')) ?>',
+        networkError: '<?= $block->escapeJs(__('Network error.')) ?>',
+        notFound: '<?= $block->escapeJs(__('Redis not found.')) ?>',
+        detectFirst: '<?= $block->escapeJs(__('Click Detect first to find Redis.')) ?>',
+        confirmDisable: '<?= $block->escapeJs(__('Disable Redis for this backend? It will revert to file-based storage.')) ?>',
+        confirmRollback: '<?= $block->escapeJs(__('Restore env.php from backup? This will undo the last Redis change.')) ?>'
+    };
+
+    function ajaxCall(data, callback) {
+        data.form_key = FORM_KEY;
+        $.ajax({
+            url: manageUrl,
+            type: 'POST',
+            dataType: 'json',
+            data: data,
+            success: callback,
+            error: function () {
+                showResult(i18n.networkError, false);
+            }
+        });
+    }
+
+    function showResult(msg, success) {
+        var $r = $('#te-redis-detect-result');
+        $r.html((success ? '<span style="color:#0a6e3f;">✓ </span>' : '<span style="color:#991b1b;">✗ </span>') + msg).show();
+    }
+
+    function updateUI(status) {
+        if (!status) return;
+        var types = ['cache', 'fpc', 'session'];
+        types.forEach(function (t) {
+            var on = status[t];
+            var $badge = $('#te-redis-' + t + '-badge');
+            var $btn = $('.te-redis-toggle[data-type="' + t + '"]');
+            var $info = $('#te-redis-' + t + '-info');
+
+            $badge.text(on ? 'Redis' : i18n.files)
+                  .attr('style', 'font-size:11px;padding:2px 8px;border-radius:10px;' +
+                      (on ? 'background:#edfdf5;color:#0a6e3f;' : 'background:#f3f4f6;color:#6b7280;'));
+
+            $btn.text(on ? i18n.disable : i18n.enable)
+                .attr('style', 'padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;' +
+                    (on ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca;' : 'background:#002643;color:#fff;border:1px solid #002643;'));
+
+            if (status.details && status.details[t]) {
+                $info.text(status.details[t]);
+            }
+        });
+    }
+
+    // Detect
+    $('#te-redis-detect').on('click', function () {
+        var $btn = $(this);
+        $btn.prop('disabled', true).text(i18n.detecting);
+
+        ajaxCall({
+            redis_action: 'detect',
+            host: $('#te-redis-host').val(),
+            port: $('#te-redis-port').val(),
+            password: $('#te-redis-password').val()
+        }, function (res) {
+            $btn.prop('disabled', false).text(i18n.detect);
+            if (res.available) {
+                detectedHost = res.host;
+                detectedPort = res.port;
+                detectedPassword = $('#te-redis-password').val();
+                if (res.recommended_dbs) recommendedDbs = res.recommended_dbs;
+                showResult(res.message, true);
+                if (res.status) updateUI(res.status);
+            } else {
+                showResult(res.message || i18n.notFound, false);
+            }
+        });
+    });
+
+    // Toggle enable/disable
+    $('.te-redis-toggle').on('click', function () {
+        var $btn = $(this);
+        var type = $btn.data('type');
+        var isEnabled = $btn.text().trim() === i18n.disable;
+
+        if (isEnabled) {
+            if (!confirm(i18n.confirmDisable)) return;
+            $btn.prop('disabled', true).text('...');
+            ajaxCall({redis_action: 'disable', type: type}, function (res) {
+                $btn.prop('disabled', false);
+                showResult(res.message, res.success);
+                if (res.status) updateUI(res.status);
+            });
+        } else {
+            if (!detectedHost) {
+                showResult(i18n.detectFirst, false);
+                return;
+            }
+            $btn.prop('disabled', true).text('...');
+            ajaxCall({
+                redis_action: 'enable',
+                type: type,
+                host: detectedHost,
+                port: detectedPort,
+                password: detectedPassword,
+                database: recommendedDbs[type] || 0
+            }, function (res) {
+                $btn.prop('disabled', false);
+                showResult(res.message, res.success);
+                if (res.status) updateUI(res.status);
+            });
+        }
+    });
+
+    // Rollback
+    $('#te-redis-rollback').on('click', function () {
+        if (!confirm(i18n.confirmRollback)) return;
+        ajaxCall({redis_action: 'rollback'}, function (res) {
+            showResult(res.message, res.success);
+            if (res.status) updateUI(res.status);
+        });
+    });
+});
+</script>

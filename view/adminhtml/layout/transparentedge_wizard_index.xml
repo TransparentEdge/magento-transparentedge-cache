@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Transparent Edge CDN - Wizard Layout
+ */
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <head>
+        <css src="TransparentEdge_CDN::css/wizard.css"/>
+    </head>
+    <body>
+        <referenceContainer name="content">
+            <block class="TransparentEdge\CDN\Block\Adminhtml\Wizard\Setup"
+                   name="transparentedge.wizard"
+                   template="TransparentEdge_CDN::wizard/setup.phtml"/>
+        </referenceContainer>
+    </body>
+</page>

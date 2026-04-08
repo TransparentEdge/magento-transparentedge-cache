@@ -1,0 +1,19 @@
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Magento generated
+generated/
+var/
+pub/static/
+
+# Backups
+*.te-backup
+*.bak

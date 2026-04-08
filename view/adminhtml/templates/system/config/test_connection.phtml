@@ -1,0 +1,51 @@
+<?php
+/**
+ * @var \TransparentEdge\CDN\Block\Adminhtml\System\Config\TestConnection $block
+ */
+?>
+<div id="te-test-connection-wrapper">
+    <?= $block->getButtonHtml() ?>
+    <span id="te-test-connection-result" style="margin-left: 12px; display: none;"></span>
+</div>
+
+<script type="text/javascript">
+    require(['jquery', 'Magento_Ui/js/modal/alert'], function ($, alert) {
+        'use strict';
+
+        $('#te_test_connection_btn').on('click', function () {
+            var $btn = $(this);
+            var $result = $('#te-test-connection-result');
+
+            $btn.prop('disabled', true).text('<?= $block->escapeJs(__('Testing...')) ?>');
+            $result.hide();
+
+            $.ajax({
+                url: '<?= $block->escapeUrl($block->getTestUrl()) ?>',
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    form_key: FORM_KEY
+                },
+                success: function (response) {
+                    $btn.prop('disabled', false).text('<?= $block->escapeJs(__('Test Connection')) ?>');
+
+                    if (response.success) {
+                        $result
+                            .html('<span style="color: #006400; font-weight: 600;">&#10003; ' + response.message + '</span>')
+                            .show();
+                    } else {
+                        $result
+                            .html('<span style="color: #8B0000; font-weight: 600;">&#10007; ' + response.message + '</span>')
+                            .show();
+                    }
+                },
+                error: function () {
+                    $btn.prop('disabled', false).text('<?= $block->escapeJs(__('Test Connection')) ?>');
+                    $result
+                        .html('<span style="color: #8B0000; font-weight: 600;">&#10007; Request failed. Check your network.</span>')
+                        .show();
+                }
+            });
+        });
+    });
+</script>

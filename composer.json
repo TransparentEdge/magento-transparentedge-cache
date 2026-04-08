@@ -1,0 +1,50 @@
+{
+    "name": "transparentedge/magento2-cdn",
+    "description": "Transparent Edge CDN integration for Magento 2 — Surrogate-Keys, tag-based invalidation, TTL management, i3 image optimization, and cache warm-up.",
+    "keywords": [
+        "magento2",
+        "cdn",
+        "transparent edge",
+        "varnish",
+        "cache",
+        "surrogate-key",
+        "invalidation",
+        "i3",
+        "webp"
+    ],
+    "require": {
+        "php": "^8.1",
+        "magento/framework": ">=103.0.0",
+        "magento/module-store": ">=101.1.0",
+        "magento/module-catalog": ">=104.0.0",
+        "magento/module-cms": ">=104.0.0",
+        "magento/module-page-cache": ">=100.4.0",
+        "magento/module-backend": ">=102.0.0",
+        "guzzlehttp/guzzle": "^7.5"
+    },
+    "type": "magento2-module",
+    "version": "1.0.0",
+    "license": "MIT",
+    "homepage": "https://github.com/TransparentEdge/magento-transparentedge-cache",
+    "support": {
+        "email": "help+cdn@transparentedge.eu",
+        "issues": "https://github.com/TransparentEdge/magento-transparentedge-cache/issues",
+        "source": "https://github.com/TransparentEdge/magento-transparentedge-cache"
+    },
+    "authors": [
+        {
+            "name": "Transparent Edge Services",
+            "email": "desarrollo@transparentedge.eu",
+            "homepage": "https://www.transparentedge.eu/",
+            "role": "Developer"
+        }
+    ],
+    "autoload": {
+        "files": [
+            "registration.php"
+        ],
+        "psr-4": {
+            "TransparentEdge\\CDN\\": ""
+        }
+    }
+}

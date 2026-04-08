@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Transparent Edge CDN - Admin Menu
+ *
+ * Adds a "Transparent Edge" section in the admin sidebar
+ * with links to Configuration and Setup Wizard.
+ *
+ * @package   TransparentEdge_CDN
+ * @author    Transparent Edge Services
+ * @copyright Copyright (c) 2025 Transparent Edge Services
+ * @license   MIT
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Backend:etc/menu.xsd">
+    <menu>
+        <!-- Top-level menu item -->
+        <add id="TransparentEdge_CDN::main"
+             title="Transparent Edge"
+             module="TransparentEdge_CDN"
+             sortOrder="90"
+             resource="TransparentEdge_CDN::configuration"/>
+
+        <!-- Setup Wizard -->
+        <add id="TransparentEdge_CDN::wizard"
+             title="Setup Wizard"
+             module="TransparentEdge_CDN"
+             sortOrder="10"
+             parent="TransparentEdge_CDN::main"
+             action="transparentedge/wizard/index"
+             resource="TransparentEdge_CDN::configuration"/>
+
+        <!-- Configuration (deep link) -->
+        <add id="TransparentEdge_CDN::config"
+             title="Configuration"
+             module="TransparentEdge_CDN"
+             sortOrder="20"
+             parent="TransparentEdge_CDN::main"
+             action="adminhtml/system_config/edit/section/transparentedge"
+             resource="TransparentEdge_CDN::configuration"/>
+
+        <!-- Purge CDN Cache -->
+        <add id="TransparentEdge_CDN::purge"
+             title="Purge CDN Cache"
+             module="TransparentEdge_CDN"
+             sortOrder="30"
+             parent="TransparentEdge_CDN::main"
+             action="transparentedge/cache/purge"
+             resource="TransparentEdge_CDN::purge"/>
+
+    </menu>
+</config>

@@ -1,0 +1,14 @@
+/* ═══════════════════════════════════════════════════════════════
+   Transparent Edge CDN — Admin Sidebar Menu Icon
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Menu icon for the sidebar */
+.item-transparentedge-cdn > a::before {
+    content: '';
+    display: inline-block;
+    width: 28px;
+    height: 28px;
+    background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="4" fill="%2300A5A6"/><rect x="6" y="6" width="12" height="12" rx="2" fill="%23fff"/></svg>') no-repeat center;
+    background-size: contain;
+    vertical-align: middle;
+}

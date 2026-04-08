@@ -1,0 +1,93 @@
+<?php
+/**
+ * @var \TransparentEdge\CDN\Block\Adminhtml\System\Config\VclPreview $block
+ */
+$vclCode = $block->getVclCode();
+?>
+<div id="te-vcl-preview-wrapper">
+    <?= $block->getButtonHtml() ?>
+    <button id="te_vcl_copy_btn"
+            type="button"
+            class="action-secondary"
+            style="margin-left: 8px; display: none;"
+            title="<?= $block->escapeHtmlAttr(__('Copy VCL to clipboard')) ?>">
+        <?= $block->escapeHtml(__('Copy VCL')) ?>
+    </button>
+</div>
+
+<div id="te-vcl-modal" style="display: none;">
+    <pre id="te-vcl-code"
+         style="background: #1e1e2e; color: #cdd6f4; padding: 16px; border-radius: 6px;
+                font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+                font-size: 12px; line-height: 1.5; overflow: auto; max-height: 500px;
+                white-space: pre; tab-size: 4;"><?= $block->escapeHtml($vclCode) ?></pre>
+</div>
+
+<script type="text/javascript">
+    require(['jquery', 'Magento_Ui/js/modal/modal'], function ($, modal) {
+        'use strict';
+
+        var options = {
+            type: 'popup',
+            responsive: true,
+            title: '<?= $block->escapeJs(__('Transparent Edge VCL Configuration')) ?>',
+            modalClass: 'te-vcl-modal-dialog',
+            buttons: [{
+                text: $.mage.__('Copy to Clipboard'),
+                class: 'action-primary',
+                click: function () {
+                    copyVcl();
+                }
+            }, {
+                text: $.mage.__('Close'),
+                class: 'action-secondary',
+                click: function () {
+                    this.closeModal();
+                }
+            }]
+        };
+
+        var $modal = $('#te-vcl-modal');
+        modal(options, $modal);
+
+        $('#te_vcl_preview_btn').on('click', function () {
+            $modal.modal('openModal');
+        });
+
+        $('#te_vcl_copy_btn').on('click', function () {
+            copyVcl();
+        });
+
+        function copyVcl() {
+            var vclText = document.getElementById('te-vcl-code').textContent;
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(vclText).then(function () {
+                    showCopiedFeedback();
+                });
+            } else {
+                // Fallback
+                var textarea = document.createElement('textarea');
+                textarea.value = vclText;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                showCopiedFeedback();
+            }
+        }
+
+        function showCopiedFeedback() {
+            var $btn = $('#te_vcl_copy_btn');
+            var original = $btn.text();
+            $btn.text('<?= $block->escapeJs(__('Copied!')) ?>');
+            setTimeout(function () {
+                $btn.text(original);
+            }, 2000);
+        }
+
+        // Show copy button once VCL preview has been used at least once
+        $('#te_vcl_preview_btn').one('click', function () {
+            $('#te_vcl_copy_btn').show();
+        });
+    });
+</script>

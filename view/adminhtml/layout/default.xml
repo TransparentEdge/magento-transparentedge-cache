@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Transparent Edge CDN - Default Admin Layout
+ *
+ * Adds the setup notification to all admin pages.
+ */
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <head>
+        <css src="TransparentEdge_CDN::css/admin.css"/>
+    </head>
+    <body>
+        <referenceContainer name="notifications">
+            <block class="TransparentEdge\CDN\Block\Adminhtml\Notification"
+                   name="transparentedge.notification"
+                   template="TransparentEdge_CDN::notification.phtml"
+                   before="-"/>
+        </referenceContainer>
+    </body>
+</page>

@@ -1,0 +1,545 @@
+<?php
+/**
+ * Setup Wizard template
+ *
+ * @var \TransparentEdge\CDN\Block\Adminhtml\Wizard\Setup $block
+ */
+$saveUrl   = $block->getSaveUrl();
+$configUrl = $block->getConfigUrl();
+$dashUrl   = $block->getDashboardUrl();
+$companyId = $block->getCompanyId();
+$clientId  = $block->getClientId();
+$baseUrl   = $block->getStoreBaseUrl();
+$completed = $block->isWizardCompleted();
+$configured = $block->isConfigured();
+?>
+
+<div class="te-wizard" id="te-wizard">
+    <!-- Header -->
+    <div class="te-wizard__header">
+        <svg class="te-wizard__logo" viewBox="0 0 200 40" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0" y="8" width="24" height="24" rx="4" fill="#00A5A6"/>
+            <rect x="6" y="14" width="12" height="12" rx="2" fill="#fff"/>
+            <text x="32" y="28" font-family="'Plus Jakarta Sans', sans-serif" font-size="18" font-weight="700" fill="#002643">Transparent Edge</text>
+        </svg>
+        <h1 class="te-wizard__title"><?= $block->escapeHtml(__('CDN Setup Wizard')) ?></h1>
+        <p class="te-wizard__subtitle"><?= $block->escapeHtml(__('Configure your CDN integration in 4 simple steps')) ?></p>
+    </div>
+
+    <!-- Progress -->
+    <div class="te-wizard__progress" id="te-progress">
+        <div class="te-wizard__step-indicator">
+            <span class="te-wizard__step-dot active" data-step="1">1</span>
+            <span class="te-wizard__step-label active"><?= $block->escapeHtml(__('Credentials')) ?></span>
+        </div>
+        <div class="te-wizard__step-line" data-line="1"></div>
+        <div class="te-wizard__step-indicator">
+            <span class="te-wizard__step-dot" data-step="2">2</span>
+            <span class="te-wizard__step-label"><?= $block->escapeHtml(__('Cache')) ?></span>
+        </div>
+        <div class="te-wizard__step-line" data-line="2"></div>
+        <div class="te-wizard__step-indicator">
+            <span class="te-wizard__step-dot" data-step="3">3</span>
+            <span class="te-wizard__step-label"><?= $block->escapeHtml(__('Features')) ?></span>
+        </div>
+        <div class="te-wizard__step-line" data-line="3"></div>
+        <div class="te-wizard__step-indicator">
+            <span class="te-wizard__step-dot" data-step="4">4</span>
+            <span class="te-wizard__step-label"><?= $block->escapeHtml(__('Activate')) ?></span>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- STEP 1: Credentials                                -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div class="te-wizard__card active" id="step-1">
+        <h2 class="te-wizard__card-title"><?= $block->escapeHtml(__('Connect to Transparent Edge')) ?></h2>
+        <p class="te-wizard__card-desc">
+            <?= $block->escapeHtml(__('Enter your API credentials. You\'ll find them in the')) ?>
+            <a href="https://dashboard.transparentcdn.com" target="_blank" rel="noopener">Transparent Edge Dashboard</a>
+            → API Keys.
+        </p>
+
+        <div class="te-wizard__field">
+            <label for="te-company-id"><?= $block->escapeHtml(__('Company ID')) ?></label>
+            <input type="text" id="te-company-id" value="<?= $block->escapeHtmlAttr($companyId) ?>"
+                   placeholder="82" autocomplete="off"/>
+            <div class="te-hint"><?= $block->escapeHtml(__('Your numeric company identifier.')) ?></div>
+        </div>
+
+        <div class="te-wizard__field">
+            <label for="te-client-id"><?= $block->escapeHtml(__('Client ID')) ?></label>
+            <input type="text" id="te-client-id" value="<?= $block->escapeHtmlAttr($clientId) ?>"
+                   placeholder="your-client-id" autocomplete="off"/>
+        </div>
+
+        <div class="te-wizard__field">
+            <label for="te-client-secret"><?= $block->escapeHtml(__('Client Secret')) ?></label>
+            <input type="password" id="te-client-secret" value="" placeholder="••••••••••••" autocomplete="new-password"/>
+        </div>
+
+        <div id="te-test-status" class="te-wizard__status"></div>
+
+        <div class="te-wizard__actions">
+            <button type="button" class="te-wizard__btn te-wizard__btn--test" id="btn-test">
+                <?= $block->escapeHtml(__('Test Connection')) ?>
+            </button>
+            <button type="button" class="te-wizard__btn te-wizard__btn--primary" id="btn-next-1" disabled>
+                <?= $block->escapeHtml(__('Next')) ?> →
+            </button>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- STEP 2: Cache Preset                               -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div class="te-wizard__card" id="step-2">
+        <h2 class="te-wizard__card-title"><?= $block->escapeHtml(__('Choose Your Cache Strategy')) ?></h2>
+        <p class="te-wizard__card-desc">
+            <?= $block->escapeHtml(__('Select a caching preset that matches your site. You can fine-tune these values later in the advanced configuration.')) ?>
+        </p>
+
+        <div class="te-wizard__presets">
+            <div class="te-wizard__preset" data-preset="ecommerce" id="preset-ecommerce">
+                <span class="te-wizard__preset-badge"><?= $block->escapeHtml(__('Recommended')) ?></span>
+                <div class="te-wizard__preset-icon">🛒</div>
+                <div class="te-wizard__preset-name"><?= $block->escapeHtml(__('Ecommerce')) ?></div>
+                <div class="te-wizard__preset-desc"><?= $block->escapeHtml(__('4h CDN cache, 10min browser. Ideal for stores with frequent product/price changes.')) ?></div>
+            </div>
+
+            <div class="te-wizard__preset" data-preset="standard" id="preset-standard">
+                <div class="te-wizard__preset-icon">🌐</div>
+                <div class="te-wizard__preset-name"><?= $block->escapeHtml(__('Standard')) ?></div>
+                <div class="te-wizard__preset-desc"><?= $block->escapeHtml(__('24h CDN cache, 30min browser. Good balance for most sites.')) ?></div>
+            </div>
+
+            <div class="te-wizard__preset" data-preset="aggressive" id="preset-aggressive">
+                <div class="te-wizard__preset-icon">⚡</div>
+                <div class="te-wizard__preset-name"><?= $block->escapeHtml(__('Aggressive')) ?></div>
+                <div class="te-wizard__preset-desc"><?= $block->escapeHtml(__('48h CDN cache, 1h browser. Maximum performance for stable content.')) ?></div>
+            </div>
+        </div>
+
+        <div id="te-preset-detail" class="te-wizard__status info" style="display:none;"></div>
+
+        <div class="te-wizard__actions">
+            <button type="button" class="te-wizard__btn te-wizard__btn--secondary" id="btn-back-2">
+                ← <?= $block->escapeHtml(__('Back')) ?>
+            </button>
+            <button type="button" class="te-wizard__btn te-wizard__btn--primary" id="btn-next-2" disabled>
+                <?= $block->escapeHtml(__('Next')) ?> →
+            </button>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- STEP 3: Features                                   -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div class="te-wizard__card" id="step-3">
+        <h2 class="te-wizard__card-title"><?= $block->escapeHtml(__('Enable Features')) ?></h2>
+        <p class="te-wizard__card-desc">
+            <?= $block->escapeHtml(__('Choose which features to activate. All of these can be changed later.')) ?>
+        </p>
+
+        <!-- Cache Warm-up -->
+        <div class="te-wizard__toggle-row">
+            <div class="te-wizard__toggle-info">
+                <div class="te-wizard__toggle-name">🔥 <?= $block->escapeHtml(__('Cache Warm-up')) ?></div>
+                <div class="te-wizard__toggle-desc"><?= $block->escapeHtml(__('Automatically warm key pages after each cache purge. Ensures fast first-visit load times.')) ?></div>
+            </div>
+            <label class="te-wizard__switch">
+                <input type="checkbox" id="feat-warmup" checked/>
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <!-- Warm-up: Homepage -->
+        <div class="te-wizard__toggle-row" id="warmup-homepage-row">
+            <div class="te-wizard__toggle-info">
+                <div class="te-wizard__toggle-name" style="padding-left: 24px;">↳ <?= $block->escapeHtml(__('Warm Homepage')) ?></div>
+            </div>
+            <label class="te-wizard__switch">
+                <input type="checkbox" id="feat-warmup-homepage" checked/>
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <!-- Warm-up: Categories -->
+        <div class="te-wizard__toggle-row" id="warmup-cats-row">
+            <div class="te-wizard__toggle-info">
+                <div class="te-wizard__toggle-name" style="padding-left: 24px;">↳ <?= $block->escapeHtml(__('Warm Category Pages')) ?></div>
+            </div>
+            <label class="te-wizard__switch">
+                <input type="checkbox" id="feat-warmup-categories" checked/>
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <!-- Warm-up: Sitemap -->
+        <div class="te-wizard__toggle-row" id="warmup-sitemap-row">
+            <div class="te-wizard__toggle-info">
+                <div class="te-wizard__toggle-name" style="padding-left: 24px;">↳ <?= $block->escapeHtml(__('Warm from Sitemap')) ?></div>
+                <div class="te-wizard__toggle-desc" style="padding-left: 24px;"><?= $block->escapeHtml(__('Parse sitemap.xml and warm up to 200 URLs.')) ?></div>
+            </div>
+            <label class="te-wizard__switch">
+                <input type="checkbox" id="feat-warmup-sitemap"/>
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <div style="height: 12px;"></div>
+
+        <!-- i3 Image Optimization -->
+        <div class="te-wizard__toggle-row">
+            <div class="te-wizard__toggle-info">
+                <div class="te-wizard__toggle-name">🖼️ <?= $block->escapeHtml(__('i3 Image Optimization')) ?></div>
+                <div class="te-wizard__toggle-desc"><?= $block->escapeHtml(__('Auto WebP/AVIF, quality control, max width. Requires VCL configuration in the dashboard.')) ?></div>
+            </div>
+            <label class="te-wizard__switch">
+                <input type="checkbox" id="feat-i3"/>
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <!-- Admin Bypass -->
+        <div class="te-wizard__toggle-row">
+            <div class="te-wizard__toggle-info">
+                <div class="te-wizard__toggle-name">👤 <?= $block->escapeHtml(__('Admin Bypass')) ?></div>
+                <div class="te-wizard__toggle-desc"><?= $block->escapeHtml(__('Logged-in admins see uncached pages. Useful for previewing changes.')) ?></div>
+            </div>
+            <label class="te-wizard__switch">
+                <input type="checkbox" id="feat-admin-bypass" checked/>
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <div class="te-wizard__actions">
+            <button type="button" class="te-wizard__btn te-wizard__btn--secondary" id="btn-back-3">
+                ← <?= $block->escapeHtml(__('Back')) ?>
+            </button>
+            <button type="button" class="te-wizard__btn te-wizard__btn--primary" id="btn-next-3">
+                <?= $block->escapeHtml(__('Next')) ?> →
+            </button>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- STEP 4: Review & Activate                          -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div class="te-wizard__card" id="step-4">
+        <h2 class="te-wizard__card-title"><?= $block->escapeHtml(__('Review & Activate')) ?></h2>
+        <p class="te-wizard__card-desc">
+            <?= $block->escapeHtml(__('Here\'s a summary of your configuration. Click Activate to enable the CDN.')) ?>
+        </p>
+
+        <table class="te-wizard__summary" id="te-summary">
+            <!-- Filled by JS -->
+        </table>
+
+        <div id="te-activate-status" class="te-wizard__status"></div>
+
+        <div class="te-wizard__actions">
+            <button type="button" class="te-wizard__btn te-wizard__btn--secondary" id="btn-back-4">
+                ← <?= $block->escapeHtml(__('Back')) ?>
+            </button>
+            <button type="button" class="te-wizard__btn te-wizard__btn--success" id="btn-activate">
+                ✓ <?= $block->escapeHtml(__('Activate CDN')) ?>
+            </button>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- STEP 5: Done!                                      -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div class="te-wizard__card" id="step-5">
+        <div class="te-wizard__complete">
+            <div class="te-wizard__complete-icon">🚀</div>
+            <h2 class="te-wizard__complete-title"><?= $block->escapeHtml(__('Your CDN is Active!')) ?></h2>
+            <p class="te-wizard__complete-desc">
+                <?= $block->escapeHtml(__('Transparent Edge CDN is now accelerating your Magento store. Cache headers are being injected automatically, and tag-based invalidation is active.')) ?>
+            </p>
+
+            <div class="te-wizard__complete-links">
+                <a href="<?= $block->escapeUrl($configUrl) ?>" class="te-wizard__btn te-wizard__btn--secondary">
+                    ⚙️ <?= $block->escapeHtml(__('Advanced Configuration')) ?>
+                </a>
+                <a href="<?= $block->escapeUrl($dashUrl) ?>" target="_blank" rel="noopener" class="te-wizard__btn te-wizard__btn--primary">
+                    📊 <?= $block->escapeHtml(__('Open TE Dashboard')) ?>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript">
+require(['jquery'], function ($) {
+    'use strict';
+
+    var wizard = {
+        currentStep: 1,
+        totalSteps: 4,
+        saveUrl: '<?= $block->escapeJs($saveUrl) ?>',
+        selectedPreset: null,
+        connectionTested: false,
+
+        init: function () {
+            this.bindEvents();
+            <?php if ($completed && $configured): ?>
+            // Already configured — show completion
+            this.goToStep(5);
+            <?php endif; ?>
+        },
+
+        bindEvents: function () {
+            var self = this;
+
+            // Test connection
+            $('#btn-test').on('click', function () { self.testConnection(); });
+
+            // Navigation
+            $('#btn-next-1').on('click', function () { self.saveAndNext(1); });
+            $('#btn-next-2').on('click', function () { self.saveAndNext(2); });
+            $('#btn-next-3').on('click', function () { self.saveAndNext(3); });
+            $('#btn-back-2').on('click', function () { self.goToStep(1); });
+            $('#btn-back-3').on('click', function () { self.goToStep(2); });
+            $('#btn-back-4').on('click', function () { self.goToStep(3); });
+            $('#btn-activate').on('click', function () { self.activate(); });
+
+            // Presets
+            $('.te-wizard__preset').on('click', function () {
+                self.selectPreset($(this).data('preset'));
+            });
+
+            // Warmup parent toggle
+            $('#feat-warmup').on('change', function () {
+                var on = $(this).is(':checked');
+                $('#warmup-homepage-row, #warmup-cats-row, #warmup-sitemap-row')
+                    .css('opacity', on ? 1 : 0.4)
+                    .find('input').prop('disabled', !on);
+            });
+
+            // Enable Next after typing credentials
+            $('#te-company-id, #te-client-id, #te-client-secret').on('input', function () {
+                self.connectionTested = false;
+                $('#btn-next-1').prop('disabled', true);
+                $('#te-test-status').hide().removeClass('success error');
+            });
+        },
+
+        testConnection: function () {
+            var self = this;
+            var $btn = $('#btn-test');
+            var $status = $('#te-test-status');
+
+            var companyId    = $('#te-company-id').val().trim();
+            var clientId     = $('#te-client-id').val().trim();
+            var clientSecret = $('#te-client-secret').val().trim();
+
+            if (!companyId || !clientId || !clientSecret) {
+                $status.removeClass('success info').addClass('error')
+                    .text('<?= $block->escapeJs(__('Please fill in all three fields.')) ?>').show();
+                return;
+            }
+
+            $btn.prop('disabled', true).html('<span class="te-spinner"></span> <?= $block->escapeJs(__('Testing...')) ?>');
+            $status.hide();
+
+            $.ajax({
+                url: self.saveUrl,
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    form_key: FORM_KEY,
+                    wizard_action: 'test_connection',
+                    company_id: companyId,
+                    client_id: clientId,
+                    client_secret: clientSecret
+                },
+                success: function (res) {
+                    $btn.prop('disabled', false).text('<?= $block->escapeJs(__('Test Connection')) ?>');
+                    if (res.success) {
+                        $status.removeClass('error info').addClass('success')
+                            .html('✓ ' + res.message).show();
+                        self.connectionTested = true;
+                        $('#btn-next-1').prop('disabled', false);
+                    } else {
+                        $status.removeClass('success info').addClass('error')
+                            .html('✗ ' + res.message).show();
+                        self.connectionTested = false;
+                        $('#btn-next-1').prop('disabled', true);
+                    }
+                },
+                error: function () {
+                    $btn.prop('disabled', false).text('<?= $block->escapeJs(__('Test Connection')) ?>');
+                    $status.removeClass('success info').addClass('error')
+                        .text('<?= $block->escapeJs(__('Network error. Please try again.')) ?>').show();
+                }
+            });
+        },
+
+        selectPreset: function (preset) {
+            this.selectedPreset = preset;
+            $('.te-wizard__preset').removeClass('selected');
+            $('#preset-' + preset).addClass('selected');
+            $('#btn-next-2').prop('disabled', false);
+
+            var details = {
+                ecommerce: '<?= $block->escapeJs(__('HTML: s-maxage=14400 (4h), max-age=600 (10min) · Static: s-maxage=2592000 (30d) · Soft Purge: ON')) ?>',
+                standard: '<?= $block->escapeJs(__('HTML: s-maxage=86400 (24h), max-age=1800 (30min) · Static: s-maxage=2592000 (30d) · Soft Purge: ON')) ?>',
+                aggressive: '<?= $block->escapeJs(__('HTML: s-maxage=172800 (48h), max-age=3600 (1h) · Static: s-maxage=2592000 (30d) · Soft Purge: ON')) ?>'
+            };
+            $('#te-preset-detail').html(details[preset]).show();
+        },
+
+        saveAndNext: function (step) {
+            var self = this;
+            var data = { form_key: FORM_KEY };
+
+            switch (step) {
+                case 1:
+                    data.wizard_action = 'save_credentials';
+                    data.company_id    = $('#te-company-id').val().trim();
+                    data.client_id     = $('#te-client-id').val().trim();
+                    data.client_secret = $('#te-client-secret').val().trim();
+                    break;
+
+                case 2:
+                    data.wizard_action = 'save_cache';
+                    data.preset = self.selectedPreset;
+                    break;
+
+                case 3:
+                    data.wizard_action = 'save_features';
+                    data.warmup_enabled    = $('#feat-warmup').is(':checked') ? '1' : '0';
+                    data.warmup_homepage   = $('#feat-warmup-homepage').is(':checked') ? '1' : '0';
+                    data.warmup_categories = $('#feat-warmup-categories').is(':checked') ? '1' : '0';
+                    data.warmup_sitemap    = $('#feat-warmup-sitemap').is(':checked') ? '1' : '0';
+                    data.warmup_rate_limit = '3';
+                    data.i3_enabled        = $('#feat-i3').is(':checked') ? '1' : '0';
+                    data.i3_auto_webp      = '1';
+                    data.i3_quality        = '85';
+                    data.admin_bypass      = $('#feat-admin-bypass').is(':checked') ? '1' : '0';
+                    break;
+            }
+
+            $.ajax({
+                url: self.saveUrl,
+                type: 'POST',
+                dataType: 'json',
+                data: data,
+                success: function () {
+                    if (step === 3) {
+                        self.buildSummary();
+                    }
+                    self.goToStep(step + 1);
+                },
+                error: function () {
+                    alert('<?= $block->escapeJs(__('Error saving configuration. Please try again.')) ?>');
+                }
+            });
+        },
+
+        activate: function () {
+            var self = this;
+            var $btn = $('#btn-activate');
+            var $status = $('#te-activate-status');
+
+            $btn.prop('disabled', true).html('<span class="te-spinner"></span> <?= $block->escapeJs(__('Activating...')) ?>');
+
+            $.ajax({
+                url: self.saveUrl,
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    form_key: FORM_KEY,
+                    wizard_action: 'activate'
+                },
+                success: function (res) {
+                    if (res.success) {
+                        self.goToStep(5);
+                    } else {
+                        $btn.prop('disabled', false).html('✓ <?= $block->escapeJs(__('Activate CDN')) ?>');
+                        $status.removeClass('success info').addClass('error')
+                            .text('✗ ' + res.message).show();
+                    }
+                },
+                error: function () {
+                    $btn.prop('disabled', false).html('✓ <?= $block->escapeJs(__('Activate CDN')) ?>');
+                    $status.removeClass('success info').addClass('error')
+                        .text('<?= $block->escapeJs(__('Network error. Please try again.')) ?>').show();
+                }
+            });
+        },
+
+        buildSummary: function () {
+            var presetNames = {
+                ecommerce: '<?= $block->escapeJs(__('Ecommerce')) ?>',
+                standard: '<?= $block->escapeJs(__('Standard')) ?>',
+                aggressive: '<?= $block->escapeJs(__('Aggressive')) ?>'
+            };
+            var presetTtls = {
+                ecommerce: '4h CDN / 10min browser',
+                standard: '24h CDN / 30min browser',
+                aggressive: '48h CDN / 1h browser'
+            };
+
+            var rows = [
+                ['<?= $block->escapeJs(__('Company ID')) ?>', $('#te-company-id').val()],
+                ['<?= $block->escapeJs(__('API Connection')) ?>', '<span style="color:#0a6e3f;">✓ <?= $block->escapeJs(__('Verified')) ?></span>'],
+                ['<?= $block->escapeJs(__('Cache Preset')) ?>', presetNames[this.selectedPreset] || '-'],
+                ['<?= $block->escapeJs(__('HTML TTLs')) ?>', presetTtls[this.selectedPreset] || '-'],
+                ['<?= $block->escapeJs(__('Static TTLs')) ?>', '30d CDN / 1d browser'],
+                ['<?= $block->escapeJs(__('Soft Purge')) ?>', '<?= $block->escapeJs(__('Enabled')) ?>'],
+                ['<?= $block->escapeJs(__('Cache Warm-up')) ?>', $('#feat-warmup').is(':checked') ? '✓' : '✗'],
+                ['<?= $block->escapeJs(__('i3 Images')) ?>', $('#feat-i3').is(':checked') ? '✓ (<?= $block->escapeJs(__('requires VCL setup')) ?>)' : '✗'],
+                ['<?= $block->escapeJs(__('Admin Bypass')) ?>', $('#feat-admin-bypass').is(':checked') ? '✓' : '✗'],
+            ];
+
+            var html = '';
+            rows.forEach(function (row) {
+                html += '<tr><td>' + row[0] + '</td><td>' + row[1] + '</td></tr>';
+            });
+            $('#te-summary').html(html);
+        },
+
+        goToStep: function (step) {
+            this.currentStep = step;
+
+            // Update cards
+            $('.te-wizard__card').removeClass('active');
+            $('#step-' + step).addClass('active');
+
+            // Update progress dots and lines
+            for (var i = 1; i <= this.totalSteps; i++) {
+                var $dot   = $('[data-step="' + i + '"]');
+                var $label = $dot.next('.te-wizard__step-label');
+                var $line  = $('[data-line="' + i + '"]');
+
+                $dot.removeClass('active completed');
+                $label.removeClass('active');
+
+                if (i < step) {
+                    $dot.addClass('completed').html('✓');
+                    if ($line.length) $line.addClass('completed');
+                } else if (i === step && step <= this.totalSteps) {
+                    $dot.addClass('active').text(i);
+                    $label.addClass('active');
+                } else {
+                    $dot.text(i);
+                    if ($line.length) $line.removeClass('completed');
+                }
+            }
+
+            // Hide progress on completion step
+            if (step === 5) {
+                $('#te-progress').hide();
+            }
+
+            // Scroll to top
+            $('html, body').animate({ scrollTop: $('#te-wizard').offset().top - 20 }, 200);
+        }
+    };
+
+    wizard.init();
+});
+</script>

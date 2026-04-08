@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Transparent Edge CDN - Admin Routes
+ *
+ * @package   TransparentEdge_CDN
+ * @author    Transparent Edge Services
+ * @copyright Copyright (c) 2025 Transparent Edge Services
+ * @license   MIT
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:App/etc/routes.xsd">
+    <router id="admin">
+        <route id="transparentedge" frontName="transparentedge">
+            <module name="TransparentEdge_CDN"/>
+        </route>
+    </router>
+</config>

@@ -1,0 +1,203 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Transparent Edge CDN - Dependency Injection Configuration
+ *
+ * @package   TransparentEdge_CDN
+ * @author    Transparent Edge Services
+ * @copyright Copyright (c) 2025 Transparent Edge Services
+ * @license   MIT
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- Preferences (interface → implementation bindings)       -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+
+    <!-- Config is a concrete class, no interface needed -->
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- Type configurations                                    -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+
+    <!-- API Client -->
+    <type name="TransparentEdge\CDN\Api\ApiClient">
+        <arguments>
+            <argument name="config" xsi:type="object">TransparentEdge\CDN\Model\Config</argument>
+            <argument name="clientFactory" xsi:type="object">GuzzleHttp\ClientFactory</argument>
+            <argument name="cache" xsi:type="object">Magento\Framework\App\CacheInterface</argument>
+            <argument name="logger" xsi:type="object">TransparentEdge\CDN\Model\Logger</argument>
+        </arguments>
+    </type>
+
+    <!-- Tag Resolver -->
+    <type name="TransparentEdge\CDN\Model\TagResolver"/>
+
+    <!-- Header Manager -->
+    <type name="TransparentEdge\CDN\Model\HeaderManager">
+        <arguments>
+            <argument name="config" xsi:type="object">TransparentEdge\CDN\Model\Config</argument>
+            <argument name="tagResolver" xsi:type="object">TransparentEdge\CDN\Model\TagResolver</argument>
+            <argument name="request" xsi:type="object">Magento\Framework\App\RequestInterface</argument>
+            <argument name="logger" xsi:type="object">TransparentEdge\CDN\Model\Logger</argument>
+        </arguments>
+    </type>
+
+    <!-- Invalidator -->
+    <type name="TransparentEdge\CDN\Model\Invalidator">
+        <arguments>
+            <argument name="config" xsi:type="object">TransparentEdge\CDN\Model\Config</argument>
+            <argument name="apiClient" xsi:type="object">TransparentEdge\CDN\Api\ApiClient</argument>
+            <argument name="tagResolver" xsi:type="object">TransparentEdge\CDN\Model\TagResolver</argument>
+            <argument name="warmup" xsi:type="object">TransparentEdge\CDN\Model\Warmup</argument>
+            <argument name="logger" xsi:type="object">TransparentEdge\CDN\Model\Logger</argument>
+        </arguments>
+    </type>
+
+    <!-- AutoFlushCacheObserver -->
+    <type name="TransparentEdge\CDN\Observer\AutoFlushCacheObserver">
+        <arguments>
+            <argument name="config" xsi:type="object">TransparentEdge\CDN\Model\Config</argument>
+            <argument name="cacheTypeList" xsi:type="object">Magento\Framework\App\Cache\TypeListInterface</argument>
+            <argument name="invalidator" xsi:type="object">TransparentEdge\CDN\Model\Invalidator</argument>
+            <argument name="logger" xsi:type="object">TransparentEdge\CDN\Model\Logger</argument>
+        </arguments>
+    </type>
+
+    <!-- Warmup -->
+    <type name="TransparentEdge\CDN\Model\Warmup">
+        <arguments>
+            <argument name="config" xsi:type="object">TransparentEdge\CDN\Model\Config</argument>
+            <argument name="clientFactory" xsi:type="object">GuzzleHttp\ClientFactory</argument>
+            <argument name="categoryCollectionFactory" xsi:type="object">Magento\Catalog\Model\ResourceModel\Category\CollectionFactory</argument>
+            <argument name="storeManager" xsi:type="object">Magento\Store\Model\StoreManagerInterface</argument>
+            <argument name="appEmulation" xsi:type="object">Magento\Store\Model\App\Emulation</argument>
+            <argument name="logger" xsi:type="object">TransparentEdge\CDN\Model\Logger</argument>
+        </arguments>
+    </type>
+
+    <!-- VCL Generator -->
+    <type name="TransparentEdge\CDN\Model\VclGenerator">
+        <arguments>
+            <argument name="config" xsi:type="object">TransparentEdge\CDN\Model\Config</argument>
+        </arguments>
+    </type>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- WPO Optimizers                                         -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+
+    <type name="TransparentEdge\CDN\Model\Optimizer\PreloadOptimizer">
+        <arguments>
+            <argument name="config" xsi:type="object">TransparentEdge\CDN\Model\Config</argument>
+            <argument name="logger" xsi:type="object">TransparentEdge\CDN\Model\Logger</argument>
+        </arguments>
+    </type>
+
+    <type name="TransparentEdge\CDN\Model\Optimizer\LazyLoadOptimizer">
+        <arguments>
+            <argument name="config" xsi:type="object">TransparentEdge\CDN\Model\Config</argument>
+            <argument name="logger" xsi:type="object">TransparentEdge\CDN\Model\Logger</argument>
+        </arguments>
+    </type>
+
+    <type name="TransparentEdge\CDN\Model\Optimizer\DnsPrefetchOptimizer">
+        <arguments>
+            <argument name="config" xsi:type="object">TransparentEdge\CDN\Model\Config</argument>
+            <argument name="logger" xsi:type="object">TransparentEdge\CDN\Model\Logger</argument>
+        </arguments>
+    </type>
+
+    <type name="TransparentEdge\CDN\Model\HtmlOptimizer">
+        <arguments>
+            <argument name="config" xsi:type="object">TransparentEdge\CDN\Model\Config</argument>
+            <argument name="preloadOptimizer" xsi:type="object">TransparentEdge\CDN\Model\Optimizer\PreloadOptimizer</argument>
+            <argument name="lazyLoadOptimizer" xsi:type="object">TransparentEdge\CDN\Model\Optimizer\LazyLoadOptimizer</argument>
+            <argument name="dnsPrefetchOptimizer" xsi:type="object">TransparentEdge\CDN\Model\Optimizer\DnsPrefetchOptimizer</argument>
+            <argument name="request" xsi:type="object">Magento\Framework\App\RequestInterface</argument>
+            <argument name="logger" xsi:type="object">TransparentEdge\CDN\Model\Logger</argument>
+        </arguments>
+    </type>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- Redis Manager                                          -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+
+    <type name="TransparentEdge\CDN\Model\Redis\RedisDetector">
+        <arguments>
+            <argument name="logger" xsi:type="object">TransparentEdge\CDN\Model\Logger</argument>
+        </arguments>
+    </type>
+
+    <type name="TransparentEdge\CDN\Model\Redis\RedisManager">
+        <arguments>
+            <argument name="directoryList" xsi:type="object">Magento\Framework\App\Filesystem\DirectoryList</argument>
+            <argument name="detector" xsi:type="object">TransparentEdge\CDN\Model\Redis\RedisDetector</argument>
+            <argument name="logger" xsi:type="object">TransparentEdge\CDN\Model\Logger</argument>
+        </arguments>
+    </type>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- Plugins (interceptors)                                 -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+
+    <!-- Inject Surrogate-Key + Cache-Control headers into HTTP responses -->
+    <type name="Magento\Framework\App\Response\Http">
+        <plugin name="transparentedge_response_headers"
+                type="TransparentEdge\CDN\Plugin\ResponseHeadersPlugin"
+                sortOrder="100"/>
+    </type>
+
+    <!-- Intercept cache type cleaning to trigger CDN purge -->
+    <type name="Magento\Framework\App\Cache\TypeList">
+        <plugin name="transparentedge_cache_invalidate"
+                type="TransparentEdge\CDN\Plugin\CacheInvalidatePlugin"
+                sortOrder="100"/>
+    </type>
+
+    <!-- Intercept mass attribute update to queue CDN invalidation -->
+    <type name="Magento\Catalog\Controller\Adminhtml\Product\Action\Attribute\Save">
+        <plugin name="transparentedge_mass_attribute_save"
+                type="TransparentEdge\CDN\Plugin\MassAttributeSavePlugin"
+                sortOrder="100"/>
+    </type>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- Virtual types                                          -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+
+    <!-- Dedicated logger handler for TransparentEdge -->
+    <virtualType name="TransparentEdge\CDN\Model\Logger\Handler"
+                 type="Magento\Framework\Logger\Handler\Base">
+        <arguments>
+            <argument name="fileName" xsi:type="string">/var/log/transparentedge.log</argument>
+        </arguments>
+    </virtualType>
+
+    <virtualType name="TransparentEdge\CDN\Model\Logger"
+                 type="Magento\Framework\Logger\Monolog">
+        <arguments>
+            <argument name="name" xsi:type="string">transparentedge</argument>
+            <argument name="handlers" xsi:type="array">
+                <item name="system" xsi:type="object">TransparentEdge\CDN\Model\Logger\Handler</item>
+            </argument>
+        </arguments>
+    </virtualType>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- CLI Commands                                           -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+
+    <type name="Magento\Framework\Console\CommandListInterface">
+        <arguments>
+            <argument name="commands" xsi:type="array">
+                <item name="transparentedge_purge" xsi:type="object">TransparentEdge\CDN\Console\Command\PurgeCommand</item>
+                <item name="transparentedge_warmup" xsi:type="object">TransparentEdge\CDN\Console\Command\WarmupCommand</item>
+                <item name="transparentedge_status" xsi:type="object">TransparentEdge\CDN\Console\Command\StatusCommand</item>
+            </argument>
+        </arguments>
+    </type>
+
+</config>

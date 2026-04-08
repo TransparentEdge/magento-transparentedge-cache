@@ -1,0 +1,127 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Transparent Edge CDN - Global Event Observers
+ *
+ * These events fire in both frontend and adminhtml scopes.
+ * They handle surgical tag-based invalidation for entity changes.
+ *
+ * @package   TransparentEdge_CDN
+ * @author    Transparent Edge Services
+ * @copyright Copyright (c) 2025 Transparent Edge Services
+ * @license   MIT
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+
+    <!-- ─────────────────────────────────────────────────── -->
+    <!-- Tag-based invalidation: entity saves                -->
+    <!-- ─────────────────────────────────────────────────── -->
+
+    <!-- Product save → invalidate product + its category pages -->
+    <event name="catalog_product_save_after">
+        <observer name="transparentedge_product_save"
+                  instance="TransparentEdge\CDN\Observer\InvalidateTagsObserver"/>
+    </event>
+
+    <!-- Category save → invalidate category + parent categories -->
+    <event name="catalog_category_save_after">
+        <observer name="transparentedge_category_save"
+                  instance="TransparentEdge\CDN\Observer\InvalidateTagsObserver"/>
+    </event>
+
+    <!-- CMS Page save → invalidate the specific page -->
+    <event name="cms_page_save_after">
+        <observer name="transparentedge_cms_page_save"
+                  instance="TransparentEdge\CDN\Observer\InvalidateTagsObserver"/>
+    </event>
+
+    <!-- CMS Block save → invalidate pages containing this block -->
+    <event name="cms_block_save_after">
+        <observer name="transparentedge_cms_block_save"
+                  instance="TransparentEdge\CDN\Observer\InvalidateTagsObserver"/>
+    </event>
+
+    <!-- Generic tag cleaning (catches bulk operations, imports, etc.) -->
+    <event name="clean_cache_by_tags">
+        <observer name="transparentedge_clean_cache_by_tags"
+                  instance="TransparentEdge\CDN\Observer\InvalidateTagsObserver"/>
+    </event>
+
+    <!-- Product delete -->
+    <event name="catalog_product_delete_after">
+        <observer name="transparentedge_product_delete"
+                  instance="TransparentEdge\CDN\Observer\InvalidateTagsObserver"/>
+    </event>
+
+    <!-- Category delete -->
+    <event name="catalog_category_delete_after">
+        <observer name="transparentedge_category_delete"
+                  instance="TransparentEdge\CDN\Observer\InvalidateTagsObserver"/>
+    </event>
+
+    <!-- ─────────────────────────────────────────────────── -->
+    <!-- Full cache flush events                             -->
+    <!-- ─────────────────────────────────────────────────── -->
+
+    <!-- Admin: Flush All Cache -->
+    <event name="adminhtml_cache_flush_all">
+        <observer name="transparentedge_flush_all"
+                  instance="TransparentEdge\CDN\Observer\CacheFlushObserver"/>
+    </event>
+
+    <!-- Admin: Flush Magento Cache -->
+    <event name="adminhtml_cache_flush_system">
+        <observer name="transparentedge_flush_system"
+                  instance="TransparentEdge\CDN\Observer\CacheFlushObserver"/>
+    </event>
+
+    <!-- JS/CSS media cache flushed -->
+    <event name="clean_media_cache_after">
+        <observer name="transparentedge_flush_media"
+                  instance="TransparentEdge\CDN\Observer\CacheFlushObserver"/>
+    </event>
+
+    <!-- Catalog images cache flushed -->
+    <event name="clean_catalog_images_cache_after">
+        <observer name="transparentedge_flush_catalog_images"
+                  instance="TransparentEdge\CDN\Observer\CacheFlushObserver"/>
+    </event>
+
+    <!-- ─────────────────────────────────────────────────── -->
+    <!-- Admin controller and structural change events       -->
+    <!-- (global scope — same as Magento cache-invalidate)   -->
+    <!-- ─────────────────────────────────────────────────── -->
+
+    <!-- Theme assignment changed -->
+    <event name="assigned_theme_changed">
+        <observer name="transparentedge_theme_changed"
+                  instance="TransparentEdge\CDN\Observer\CacheFlushObserver"/>
+    </event>
+
+    <!-- Theme assigned to stores -->
+    <event name="assign_theme_to_stores_after">
+        <observer name="transparentedge_theme_assigned"
+                  instance="TransparentEdge\CDN\Observer\CacheFlushObserver"/>
+    </event>
+
+    <!-- System config saved -->
+    <event name="controller_action_postdispatch_adminhtml_system_config_save">
+        <observer name="transparentedge_config_save"
+                  instance="TransparentEdge\CDN\Observer\CacheFlushObserver"/>
+    </event>
+
+    <!-- Catalog price rule applied -->
+    <event name="catalogrule_after_apply">
+        <observer name="transparentedge_catalogrule_applied"
+                  instance="TransparentEdge\CDN\Observer\CacheFlushObserver"/>
+    </event>
+
+    <!-- Cache cleaned after reindex -->
+    <event name="clean_cache_after_reindex">
+        <observer name="transparentedge_reindex_cache_clean"
+                  instance="TransparentEdge\CDN\Observer\CacheFlushObserver"/>
+    </event>
+
+</config>

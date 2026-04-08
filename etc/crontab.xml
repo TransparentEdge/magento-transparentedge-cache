@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Transparent Edge CDN - Cron Schedule
+ *
+ * Scheduled warm-up runs periodically to keep the CDN cache warm.
+ *
+ * @package   TransparentEdge_CDN
+ * @author    Transparent Edge Services
+ * @copyright Copyright (c) 2025 Transparent Edge Services
+ * @license   MIT
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Cron:etc/crontab.xsd">
+    <group id="default">
+        <!-- Scheduled warm-up: run every 6 hours -->
+        <job name="transparentedge_scheduled_warmup"
+             instance="TransparentEdge\CDN\Cron\ScheduledWarmup"
+             method="execute">
+            <schedule>0 */6 * * *</schedule>
+        </job>
+    </group>
+</config>

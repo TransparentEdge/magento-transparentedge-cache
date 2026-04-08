@@ -1,0 +1,422 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Transparent Edge CDN - Admin System Configuration
+ *
+ * Stores > Configuration > Services > Transparent Edge CDN
+ *
+ * @package   TransparentEdge_CDN
+ * @author    Transparent Edge Services
+ * @copyright Copyright (c) 2025 Transparent Edge Services
+ * @license   MIT
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <!-- Custom tab for Transparent Edge -->
+        <tab id="transparentedge" translate="label" sortOrder="500">
+            <label>Transparent Edge</label>
+        </tab>
+
+        <section id="transparentedge" translate="label" type="text" sortOrder="10"
+                 showInDefault="1" showInWebsite="1" showInStore="1">
+            <label>CDN Configuration</label>
+            <tab>transparentedge</tab>
+            <resource>TransparentEdge_CDN::configuration</resource>
+
+            <!-- ═══════════════════════════════════════════ -->
+            <!-- General Settings                           -->
+            <!-- ═══════════════════════════════════════════ -->
+            <group id="general" translate="label comment" type="text" sortOrder="10"
+                   showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>General Settings</label>
+                <comment>Configure your Transparent Edge CDN credentials. You can find them in the Transparent Edge Dashboard (dashboard.transparentcdn.com).</comment>
+
+                <field id="enabled" translate="label comment" type="select" sortOrder="10"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable</label>
+                    <comment>Enable Transparent Edge CDN integration.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/general/enabled</config_path>
+                </field>
+
+                <field id="company_id" translate="label comment" type="text" sortOrder="20"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Company ID</label>
+                    <comment>Your Transparent Edge company identifier.</comment>
+                    <config_path>transparentedge/general/company_id</config_path>
+                    <validate>required-entry validate-digits</validate>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="client_id" translate="label comment" type="text" sortOrder="30"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Client ID</label>
+                    <comment>OAuth2 Client ID for API authentication.</comment>
+                    <config_path>transparentedge/general/client_id</config_path>
+                    <validate>required-entry</validate>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="client_secret" translate="label comment" type="obscure" sortOrder="40"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Client Secret</label>
+                    <comment>OAuth2 Client Secret for API authentication.</comment>
+                    <config_path>transparentedge/general/client_secret</config_path>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                    <validate>required-entry</validate>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <!-- Test Connection Button -->
+                <field id="test_connection" translate="label" type="button" sortOrder="50"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Test Connection</label>
+                    <frontend_model>TransparentEdge\CDN\Block\Adminhtml\System\Config\TestConnection</frontend_model>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+            </group>
+
+            <!-- ═══════════════════════════════════════════ -->
+            <!-- Cache Settings                             -->
+            <!-- ═══════════════════════════════════════════ -->
+            <group id="cache" translate="label comment" type="text" sortOrder="20"
+                   showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Cache Settings</label>
+                <comment>Configure Cache-Control TTLs sent to the CDN via origin headers. These control how long Transparent Edge Varnish caches your content.</comment>
+                <depends>
+                    <field id="transparentedge/general/enabled">1</field>
+                </depends>
+
+                <field id="html_ttl" translate="label comment" type="text" sortOrder="10"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>HTML CDN TTL (s-maxage)</label>
+                    <comment>CDN cache lifetime for HTML pages in seconds. Default: 172800 (48 hours). Recommended for ecommerce: 14400 (4 hours).</comment>
+                    <config_path>transparentedge/cache/html_ttl</config_path>
+                    <validate>validate-digits</validate>
+                </field>
+
+                <field id="html_browser_ttl" translate="label comment" type="text" sortOrder="20"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>HTML Browser TTL (max-age)</label>
+                    <comment>Browser cache lifetime for HTML pages in seconds. Default: 3600 (1 hour). Recommended for ecommerce: 600 (10 minutes).</comment>
+                    <config_path>transparentedge/cache/html_browser_ttl</config_path>
+                    <validate>validate-digits</validate>
+                </field>
+
+                <field id="static_ttl" translate="label comment" type="text" sortOrder="30"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Static Assets CDN TTL</label>
+                    <comment>CDN cache lifetime for CSS, JS, images, fonts in seconds. Default: 2592000 (30 days).</comment>
+                    <config_path>transparentedge/cache/static_ttl</config_path>
+                    <validate>validate-digits</validate>
+                </field>
+
+                <field id="static_browser_ttl" translate="label comment" type="text" sortOrder="40"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Static Assets Browser TTL</label>
+                    <comment>Browser cache lifetime for static assets in seconds. Default: 86400 (1 day).</comment>
+                    <config_path>transparentedge/cache/static_browser_ttl</config_path>
+                    <validate>validate-digits</validate>
+                </field>
+
+                <field id="stale_while_revalidate" translate="label comment" type="text" sortOrder="50"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Stale-While-Revalidate</label>
+                    <comment>Serve stale content while fetching a fresh copy in the background. Default: 86400 (1 day).</comment>
+                    <config_path>transparentedge/cache/stale_while_revalidate</config_path>
+                    <validate>validate-digits</validate>
+                </field>
+
+                <field id="stale_if_error" translate="label comment" type="text" sortOrder="60"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Stale-If-Error</label>
+                    <comment>Serve stale content if origin returns an error. Default: 86400 (1 day).</comment>
+                    <config_path>transparentedge/cache/stale_if_error</config_path>
+                    <validate>validate-digits</validate>
+                </field>
+
+                <field id="soft_purge" translate="label comment" type="select" sortOrder="70"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Soft Purge</label>
+                    <comment>Mark content as stale instead of removing it immediately. Prevents cache stampede on high-traffic sites.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/cache/soft_purge</config_path>
+                </field>
+
+                <field id="refetch" translate="label comment" type="select" sortOrder="80"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Refetch on Invalidation</label>
+                    <comment>Automatically fetch fresh content from origin after invalidation. Ensures the CDN always has a warm copy.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/cache/refetch</config_path>
+                </field>
+            </group>
+
+            <!-- ═══════════════════════════════════════════ -->
+            <!-- Warm-up Settings                           -->
+            <!-- ═══════════════════════════════════════════ -->
+            <group id="warmup" translate="label comment" type="text" sortOrder="30"
+                   showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Cache Warm-up</label>
+                <comment>Automatically warm the CDN cache after invalidation to ensure fast page loads for the first visitor.</comment>
+                <depends>
+                    <field id="transparentedge/general/enabled">1</field>
+                </depends>
+
+                <field id="enabled" translate="label" type="select" sortOrder="10"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Warm-up</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/warmup/enabled</config_path>
+                </field>
+
+                <field id="homepage" translate="label" type="select" sortOrder="20"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Warm Homepage</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/warmup/homepage</config_path>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="categories" translate="label" type="select" sortOrder="30"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Warm Category Pages</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/warmup/categories</config_path>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="sitemap" translate="label comment" type="select" sortOrder="40"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Warm from Sitemap</label>
+                    <comment>Parse the XML sitemap and warm all URLs found in it (up to 200).</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/warmup/sitemap</config_path>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="sitemap_url" translate="label comment" type="text" sortOrder="50"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Sitemap URL</label>
+                    <comment>Full URL to your XML sitemap. Leave empty to use the default /sitemap.xml.</comment>
+                    <config_path>transparentedge/warmup/sitemap_url</config_path>
+                    <depends>
+                        <field id="sitemap">1</field>
+                    </depends>
+                </field>
+
+                <field id="rate_limit" translate="label comment" type="text" sortOrder="60"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Rate Limit (req/s)</label>
+                    <comment>Maximum concurrent requests during warm-up. Default: 3. Increase only if your origin can handle it.</comment>
+                    <config_path>transparentedge/warmup/rate_limit</config_path>
+                    <validate>validate-digits validate-digits-range digits-range-1-10</validate>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="custom_urls" translate="label comment" type="textarea" sortOrder="70"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Custom Warm-up URLs</label>
+                    <comment>Additional URLs to warm after each invalidation. One per line. Can be relative (/my-page) or absolute (https://...).</comment>
+                    <config_path>transparentedge/warmup/custom_urls</config_path>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+            </group>
+
+            <!-- ═══════════════════════════════════════════ -->
+            <!-- i3 Image Optimization                      -->
+            <!-- ═══════════════════════════════════════════ -->
+            <group id="i3" translate="label comment" type="text" sortOrder="40"
+                   showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>i3 Image Optimization</label>
+                <comment>Transparent Edge i3 optimizes images on the fly at the CDN edge. This generates the VCL configuration for i3. After changing these settings, copy the generated VCL to your Transparent Edge Dashboard.</comment>
+                <depends>
+                    <field id="transparentedge/general/enabled">1</field>
+                </depends>
+
+                <field id="enabled" translate="label" type="select" sortOrder="10"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable i3</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/i3/enabled</config_path>
+                </field>
+
+                <field id="auto_webp" translate="label comment" type="select" sortOrder="20"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Auto WebP/AVIF</label>
+                    <comment>Automatically serve WebP or AVIF images to supporting browsers.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/i3/auto_webp</config_path>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="quality" translate="label comment" type="text" sortOrder="30"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Image Quality (%)</label>
+                    <comment>JPEG/WebP quality. Default: 85. Lower = smaller files, higher = better quality.</comment>
+                    <config_path>transparentedge/i3/quality</config_path>
+                    <validate>validate-digits validate-digits-range digits-range-1-100</validate>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="max_width" translate="label comment" type="text" sortOrder="40"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Maximum Width (px)</label>
+                    <comment>Cap image width to prevent serving oversized images. Default: 2560. Set to 0 to disable.</comment>
+                    <config_path>transparentedge/i3/max_width</config_path>
+                    <validate>validate-digits</validate>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <!-- VCL Preview Button -->
+                <field id="vcl_preview" translate="label" type="button" sortOrder="50"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Preview VCL</label>
+                    <frontend_model>TransparentEdge\CDN\Block\Adminhtml\System\Config\VclPreview</frontend_model>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+            </group>
+
+            <!-- ═══════════════════════════════════════════ -->
+            <!-- WPO (Web Performance Optimization)         -->
+            <!-- ═══════════════════════════════════════════ -->
+            <group id="wpo" translate="label comment" type="text" sortOrder="45"
+                   showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Web Performance (WPO)</label>
+                <comment>HTML optimizations to improve Core Web Vitals (LCP, CLS, FID). Applied at the origin before caching, benefiting all visitors.</comment>
+                <depends>
+                    <field id="transparentedge/general/enabled">1</field>
+                </depends>
+
+                <field id="enabled" translate="label comment" type="select" sortOrder="10"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable WPO</label>
+                    <comment>Enable HTML optimizations for better Core Web Vitals scores.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/wpo/enabled</config_path>
+                </field>
+
+                <field id="preload" translate="label comment" type="select" sortOrder="20"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Preload Critical Resources</label>
+                    <comment>Auto-detect and preload LCP image, critical CSS, and web fonts. Improves LCP (Largest Contentful Paint).</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/wpo/preload</config_path>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="lazyload" translate="label comment" type="select" sortOrder="30"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Lazy Load Iframes &amp; Videos</label>
+                    <comment>Defer loading of iframes (YouTube, Google Maps) and videos until they enter the viewport. Magento already handles images.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/wpo/lazyload</config_path>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="dns_prefetch" translate="label comment" type="select" sortOrder="40"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>DNS Prefetch &amp; Preconnect</label>
+                    <comment>Auto-detect external domains (analytics, fonts, CDN) and add DNS prefetch/preconnect hints. Reduces connection latency for third-party resources.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/wpo/dns_prefetch</config_path>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+            </group>
+
+            <!-- ═══════════════════════════════════════════ -->
+            <!-- Redis Management                           -->
+            <!-- ═══════════════════════════════════════════ -->
+            <group id="redis" translate="label comment" type="text" sortOrder="48"
+                   showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Redis</label>
+                <comment>Auto-detect and manage Redis for cache, FPC, and sessions. Changes modify app/etc/env.php directly — a backup is created before each change.</comment>
+                <depends>
+                    <field id="transparentedge/general/enabled">1</field>
+                </depends>
+
+                <field id="control" translate="label" type="button" sortOrder="10"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Redis Manager</label>
+                    <frontend_model>TransparentEdge\CDN\Block\Adminhtml\System\Config\RedisControl</frontend_model>
+                </field>
+            </group>
+
+            <!-- ═══════════════════════════════════════════ -->
+            <!-- Advanced Settings                          -->
+            <!-- ═══════════════════════════════════════════ -->
+            <group id="advanced" translate="label comment" type="text" sortOrder="50"
+                   showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Advanced</label>
+                <depends>
+                    <field id="transparentedge/general/enabled">1</field>
+                </depends>
+
+                <field id="admin_bypass" translate="label comment" type="select" sortOrder="10"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Admin Bypass</label>
+                    <comment>Set a cookie when admin logs in so the CDN serves uncached pages. Requires VCL support.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/advanced/admin_bypass</config_path>
+                </field>
+
+                <field id="debug" translate="label comment" type="select" sortOrder="20"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Debug Mode</label>
+                    <comment>Add X-TE-Debug headers to responses showing tag counts. Disable in production.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/advanced/debug</config_path>
+                </field>
+
+                <field id="exclude_urls" translate="label comment" type="textarea" sortOrder="30"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Exclude URLs</label>
+                    <comment>URL patterns to exclude from CDN caching. One per line. Supports wildcards (*). Checkout, customer, and cart pages are always excluded.</comment>
+                    <config_path>transparentedge/advanced/exclude_urls</config_path>
+                </field>
+
+                <field id="exclude_cookies" translate="label comment" type="textarea" sortOrder="40"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Exclude Cookies</label>
+                    <comment>Cookie names that should bypass CDN cache (for VCL generation). One per line.</comment>
+                    <config_path>transparentedge/advanced/exclude_cookies</config_path>
+                </field>
+            </group>
+
+        </section>
+    </system>
+</config>

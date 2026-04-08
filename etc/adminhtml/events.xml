@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Transparent Edge CDN - Admin Event Observers
+ *
+ * Handles admin login/logout to set/remove the CDN bypass cookie.
+ *
+ * @package   TransparentEdge_CDN
+ * @author    Transparent Edge Services
+ * @copyright Copyright (c) 2025 Transparent Edge Services
+ * @license   MIT
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+
+    <!-- Admin login → set CDN bypass cookie -->
+    <event name="backend_auth_user_login_success">
+        <observer name="transparentedge_admin_login"
+                  instance="TransparentEdge\CDN\Observer\AdminLoginObserver"/>
+    </event>
+
+    <!-- Admin logout → remove CDN bypass cookie -->
+    <event name="controller_action_predispatch_adminhtml_auth_logout">
+        <observer name="transparentedge_admin_logout"
+                  instance="TransparentEdge\CDN\Observer\AdminLogoutObserver"/>
+    </event>
+
+    <!-- Auto-flush: after any admin action, flush invalidated Magento cache types -->
+    <!-- This eliminates the "One or more cache types are invalidated" banner -->
+    <event name="controller_action_postdispatch">
+        <observer name="transparentedge_auto_flush_cache"
+                  instance="TransparentEdge\CDN\Observer\AutoFlushCacheObserver"/>
+    </event>
+
+</config>

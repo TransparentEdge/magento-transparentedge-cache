@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Transparent Edge CDN - Admin ACL Resources
+ *
+ * @package   TransparentEdge_CDN
+ * @author    Transparent Edge Services
+ * @copyright Copyright (c) 2025 Transparent Edge Services
+ * @license   MIT
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Acl/etc/acl.xsd">
+    <acl>
+        <resources>
+            <resource id="Magento_Backend::admin">
+                <resource id="Magento_Backend::stores">
+                    <resource id="Magento_Backend::stores_settings">
+                        <resource id="Magento_Config::config">
+                            <resource id="TransparentEdge_CDN::configuration"
+                                      title="Transparent Edge CDN Configuration"
+                                      sortOrder="100"/>
+                        </resource>
+                    </resource>
+                </resource>
+                <!-- System > Cache Management purge button ACL -->
+                <resource id="Magento_Backend::system">
+                    <resource id="TransparentEdge_CDN::purge"
+                              title="Transparent Edge CDN Purge"
+                              sortOrder="100"/>
+                </resource>
+            </resource>
+        </resources>
+    </acl>
+</config>
