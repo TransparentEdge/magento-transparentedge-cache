@@ -109,6 +109,10 @@ class HeaderManager
         // Debug header
         if ($this->config->isDebugMode()) {
             $this->applyDebugHeaders($response);
+        } else {
+            // In production, remove X-Magento-Tags to avoid exposing
+            // internal catalog structure (product IDs, category IDs, etc.)
+            $response->clearHeader(self::HEADER_MAGENTO_TAGS);
         }
     }
 

@@ -97,6 +97,7 @@ class AdminLoginObserver implements ObserverInterface
                 ->setDuration($lifetime)
                 ->setPath('/')
                 ->setHttpOnly(false)
+                ->setSecure(true)
                 ->setSameSite('Lax');
 
             $this->cookieManager->setPublicCookie(

@@ -35,6 +35,22 @@ class RedisDetector
     ];
 
     /**
+     * Allowed hostnames/IPs for Redis connections (SSRF protection).
+     * Only these hosts can be probed via the admin panel.
+     */
+    private const ALLOWED_HOSTS = [
+        '127.0.0.1', 'localhost', '::1',
+        'redis', 'redis-master', 'redis-slave', 'redis-sentinel',
+    ];
+
+    /**
+     * Allowed port range for Redis connections
+     */
+    private const MIN_PORT = 1024;
+    private const MAX_PORT = 65535;
+    private const DEFAULT_PORT = 6379;
+
+    /**
      * @var LoggerInterface
      */
     private LoggerInterface $logger;
@@ -68,9 +84,17 @@ class RedisDetector
             'message'   => '',
         ];
 
-        // If custom host provided, try that first
+        // If custom host provided, validate and try that first
         if (!empty($host)) {
-            $locations = [['host' => $host, 'port' => $port ?: 6379]];
+            if (!$this->isAllowedHost($host, $port ?: self::DEFAULT_PORT)) {
+                $result['message'] = 'Host not allowed. Only local Redis instances are supported.';
+                $this->logger->warning('TransparentEdge: Redis probe blocked (SSRF protection)', [
+                    'host' => $host,
+                    'port' => $port,
+                ]);
+                return $result;
+            }
+            $locations = [['host' => $host, 'port' => $port ?: self::DEFAULT_PORT]];
         } else {
             $locations = self::PROBE_LOCATIONS;
         }
@@ -244,6 +268,63 @@ class RedisDetector
         }
 
         return $data;
+    }
+
+    /**
+     * Validate that a host is safe to connect to (SSRF protection)
+     *
+     * Only allows loopback addresses, known Docker service names,
+     * private RFC1918 addresses, and Unix sockets.
+     * Blocks metadata endpoints (169.254.x.x) and public IPs.
+     *
+     * @param  string $host
+     * @param  int    $port
+     * @return bool
+     */
+    private function isAllowedHost(string $host, int $port): bool
+    {
+        // Unix sockets are always local
+        if (strpos($host, '/') === 0) {
+            return true;
+        }
+
+        // Check against whitelist
+        if (in_array(strtolower($host), self::ALLOWED_HOSTS, true)) {
+            return true;
+        }
+
+        // Allow private RFC1918 IPs (10.x, 172.16-31.x, 192.168.x)
+        if (filter_var($host, FILTER_VALIDATE_IP)) {
+            // Block link-local / metadata (169.254.x.x — AWS/GCP metadata endpoint)
+            if (strpos($host, '169.254.') === 0) {
+                return false;
+            }
+            // Block 0.0.0.0
+            if ($host === '0.0.0.0') {
+                return false;
+            }
+            // Allow private ranges
+            if (!filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                return true;
+            }
+            // Block public IPs
+            return false;
+        }
+
+        // Validate port range
+        if ($port < self::MIN_PORT || $port > self::MAX_PORT) {
+            if ($port !== self::DEFAULT_PORT) {
+                return false;
+            }
+        }
+
+        // Block anything with dots (external domains)
+        if (strpos($host, '.') !== false) {
+            return false;
+        }
+
+        // Allow single-word hostnames (Docker service names like 'redis-cache')
+        return (bool) preg_match('/^[a-zA-Z][a-zA-Z0-9_-]*$/', $host);
     }
 
     /**

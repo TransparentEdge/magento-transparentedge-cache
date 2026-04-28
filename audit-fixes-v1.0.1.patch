@@ -1,0 +1,219 @@
+diff --git a/Model/HeaderManager.php b/Model/HeaderManager.php
+index d28637e..3738a56 100644
+--- a/Model/HeaderManager.php
++++ b/Model/HeaderManager.php
+@@ -109,6 +109,10 @@ class HeaderManager
+         // Debug header
+         if ($this->config->isDebugMode()) {
+             $this->applyDebugHeaders($response);
++        } else {
++            // In production, remove X-Magento-Tags to avoid exposing
++            // internal catalog structure (product IDs, category IDs, etc.)
++            $response->clearHeader(self::HEADER_MAGENTO_TAGS);
+         }
+     }
+ 
+diff --git a/Model/Invalidator.php b/Model/Invalidator.php
+index 1a9dd55..404c06c 100644
+--- a/Model/Invalidator.php
++++ b/Model/Invalidator.php
+@@ -25,6 +25,13 @@ class Invalidator
+      */
+     private const MAX_TAGS_PER_REQUEST = 100;
+ 
++    /**
++     * Maximum pending tags before switching to full purge.
++     * Prevents memory issues during massive imports and reduces
++     * API calls (1 full ban vs hundreds of batched tag invalidations).
++     */
++    private const FULL_PURGE_THRESHOLD = 5000;
++
+     /**
+      * @var Config
+      */
+@@ -106,8 +113,20 @@ class Invalidator
+         $this->pendingTags = array_merge($this->pendingTags, $magentoTags);
+         $this->registerShutdown();
+ 
++        // Safety valve: if too many tags accumulate (massive import/reindex),
++        // switch to a single full ban instead of hundreds of batched API calls.
++        if (count($this->pendingTags) > self::FULL_PURGE_THRESHOLD) {
++            $this->logger->warning('TransparentEdge: Tag threshold exceeded, converting to full ban', [
++                'pending_tags' => count($this->pendingTags),
++                'threshold'    => self::FULL_PURGE_THRESHOLD,
++            ]);
++            $this->pendingTags = [];
++            $this->fullPurge = true;
++            return;
++        }
++
+         $this->logger->debug('TransparentEdge: Queued tags for invalidation', [
+-            'new_tags'   => count($magentoTags),
++            'new_tags'      => count($magentoTags),
+             'total_pending' => count($this->pendingTags),
+         ]);
+     }
+@@ -149,6 +168,14 @@ class Invalidator
+      */
+     public function flush(): array
+     {
++        // In FastCGI environments, send the response to the client first
++        // so API calls don't block the user. Also acts as a safety net:
++        // if PHP-FPM kills the process before shutdown, at least the
++        // response was already sent.
++        if (function_exists('fastcgi_finish_request')) {
++            fastcgi_finish_request();
++        }
++
+         $results = [];
+ 
+         if ($this->fullPurge) {
+diff --git a/Model/Redis/RedisDetector.php b/Model/Redis/RedisDetector.php
+index 3b3f3ea..1cdf34f 100644
+--- a/Model/Redis/RedisDetector.php
++++ b/Model/Redis/RedisDetector.php
+@@ -34,6 +34,22 @@ class RedisDetector
+         ['host' => '/tmp/redis.sock'],                  // Alternative socket
+     ];
+ 
++    /**
++     * Allowed hostnames/IPs for Redis connections (SSRF protection).
++     * Only these hosts can be probed via the admin panel.
++     */
++    private const ALLOWED_HOSTS = [
++        '127.0.0.1', 'localhost', '::1',
++        'redis', 'redis-master', 'redis-slave', 'redis-sentinel',
++    ];
++
++    /**
++     * Allowed port range for Redis connections
++     */
++    private const MIN_PORT = 1024;
++    private const MAX_PORT = 65535;
++    private const DEFAULT_PORT = 6379;
++
+     /**
+      * @var LoggerInterface
+      */
+@@ -68,9 +84,17 @@ class RedisDetector
+             'message'   => '',
+         ];
+ 
+-        // If custom host provided, try that first
++        // If custom host provided, validate and try that first
+         if (!empty($host)) {
+-            $locations = [['host' => $host, 'port' => $port ?: 6379]];
++            if (!$this->isAllowedHost($host, $port ?: self::DEFAULT_PORT)) {
++                $result['message'] = 'Host not allowed. Only local Redis instances are supported.';
++                $this->logger->warning('TransparentEdge: Redis probe blocked (SSRF protection)', [
++                    'host' => $host,
++                    'port' => $port,
++                ]);
++                return $result;
++            }
++            $locations = [['host' => $host, 'port' => $port ?: self::DEFAULT_PORT]];
+         } else {
+             $locations = self::PROBE_LOCATIONS;
+         }
+@@ -246,6 +270,63 @@ class RedisDetector
+         return $data;
+     }
+ 
++    /**
++     * Validate that a host is safe to connect to (SSRF protection)
++     *
++     * Only allows loopback addresses, known Docker service names,
++     * private RFC1918 addresses, and Unix sockets.
++     * Blocks metadata endpoints (169.254.x.x) and public IPs.
++     *
++     * @param  string $host
++     * @param  int    $port
++     * @return bool
++     */
++    private function isAllowedHost(string $host, int $port): bool
++    {
++        // Unix sockets are always local
++        if (strpos($host, '/') === 0) {
++            return true;
++        }
++
++        // Check against whitelist
++        if (in_array(strtolower($host), self::ALLOWED_HOSTS, true)) {
++            return true;
++        }
++
++        // Allow private RFC1918 IPs (10.x, 172.16-31.x, 192.168.x)
++        if (filter_var($host, FILTER_VALIDATE_IP)) {
++            // Block link-local / metadata (169.254.x.x — AWS/GCP metadata endpoint)
++            if (strpos($host, '169.254.') === 0) {
++                return false;
++            }
++            // Block 0.0.0.0
++            if ($host === '0.0.0.0') {
++                return false;
++            }
++            // Allow private ranges
++            if (!filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
++                return true;
++            }
++            // Block public IPs
++            return false;
++        }
++
++        // Validate port range
++        if ($port < self::MIN_PORT || $port > self::MAX_PORT) {
++            if ($port !== self::DEFAULT_PORT) {
++                return false;
++            }
++        }
++
++        // Block anything with dots (external domains)
++        if (strpos($host, '.') !== false) {
++            return false;
++        }
++
++        // Allow single-word hostnames (Docker service names like 'redis-cache')
++        return (bool) preg_match('/^[a-zA-Z][a-zA-Z0-9_-]*$/', $host);
++    }
++
+     /**
+      * Get recommended database assignments
+      *
+diff --git a/Model/VclGenerator.php b/Model/VclGenerator.php
+index 73e3862..f4ac9be 100644
+--- a/Model/VclGenerator.php
++++ b/Model/VclGenerator.php
+@@ -54,7 +54,7 @@ class VclGenerator
+         $vcl = [];
+         $vcl[] = '# ═══════════════════════════════════════════════════════════';
+         $vcl[] = '# Transparent Edge CDN — Magento 2 VCL Configuration';
+-        $vcl[] = '# Plugin version: 2.0.0';
++        $vcl[] = '# Plugin version: 1.0.0';
+         $vcl[] = '# Generated: ' . date('Y-m-d H:i:s');
+         $vcl[] = '# Host: ' . $host;
+         $vcl[] = '#';
+diff --git a/Model/Warmup.php b/Model/Warmup.php
+index 117763b..d90440c 100644
+--- a/Model/Warmup.php
++++ b/Model/Warmup.php
+@@ -327,7 +327,7 @@ class Warmup
+         $requests = function () use ($urls) {
+             foreach ($urls as $url) {
+                 yield new Request('GET', $url, [
+-                    'User-Agent' => 'TransparentEdge-Warmup/2.0 (Magento)',
++                    'User-Agent' => 'TransparentEdge-Warmup/1.0 (Magento)',
+                 ]);
+             }
+         };
+diff --git a/Observer/AdminLoginObserver.php b/Observer/AdminLoginObserver.php
+index 99c5d75..53fd1d1 100644
+--- a/Observer/AdminLoginObserver.php
++++ b/Observer/AdminLoginObserver.php
+@@ -97,6 +97,7 @@ class AdminLoginObserver implements ObserverInterface
+                 ->setDuration($lifetime)
+                 ->setPath('/')
+                 ->setHttpOnly(false)
++                ->setSecure(true)
+                 ->setSameSite('Lax');
+ 
+             $this->cookieManager->setPublicCookie(

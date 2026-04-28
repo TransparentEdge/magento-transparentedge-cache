@@ -327,7 +327,7 @@ class Warmup
         $requests = function () use ($urls) {
             foreach ($urls as $url) {
                 yield new Request('GET', $url, [
-                    'User-Agent' => 'TransparentEdge-Warmup/2.0 (Magento)',
+                    'User-Agent' => 'TransparentEdge-Warmup/1.0 (Magento)',
                 ]);
             }
         };

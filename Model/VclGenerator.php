@@ -54,7 +54,7 @@ class VclGenerator
         $vcl = [];
         $vcl[] = '# ═══════════════════════════════════════════════════════════';
         $vcl[] = '# Transparent Edge CDN — Magento 2 VCL Configuration';
-        $vcl[] = '# Plugin version: 2.0.0';
+        $vcl[] = '# Plugin version: 1.0.0';
         $vcl[] = '# Generated: ' . date('Y-m-d H:i:s');
         $vcl[] = '# Host: ' . $host;
         $vcl[] = '#';

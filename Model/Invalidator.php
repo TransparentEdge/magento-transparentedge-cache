@@ -26,6 +26,13 @@ class Invalidator
     private const MAX_TAGS_PER_REQUEST = 100;
 
     /**
+     * Maximum pending tags before switching to full purge.
+     * Prevents memory issues during massive imports and reduces
+     * API calls (1 full ban vs hundreds of batched tag invalidations).
+     */
+    private const FULL_PURGE_THRESHOLD = 5000;
+
+    /**
      * @var Config
      */
     private Config $config;
@@ -106,8 +113,20 @@ class Invalidator
         $this->pendingTags = array_merge($this->pendingTags, $magentoTags);
         $this->registerShutdown();
 
+        // Safety valve: if too many tags accumulate (massive import/reindex),
+        // switch to a single full ban instead of hundreds of batched API calls.
+        if (count($this->pendingTags) > self::FULL_PURGE_THRESHOLD) {
+            $this->logger->warning('TransparentEdge: Tag threshold exceeded, converting to full ban', [
+                'pending_tags' => count($this->pendingTags),
+                'threshold'    => self::FULL_PURGE_THRESHOLD,
+            ]);
+            $this->pendingTags = [];
+            $this->fullPurge = true;
+            return;
+        }
+
         $this->logger->debug('TransparentEdge: Queued tags for invalidation', [
-            'new_tags'   => count($magentoTags),
+            'new_tags'      => count($magentoTags),
             'total_pending' => count($this->pendingTags),
         ]);
     }
@@ -149,6 +168,14 @@ class Invalidator
      */
     public function flush(): array
     {
+        // In FastCGI environments, send the response to the client first
+        // so API calls don't block the user. Also acts as a safety net:
+        // if PHP-FPM kills the process before shutdown, at least the
+        // response was already sent.
+        if (function_exists('fastcgi_finish_request')) {
+            fastcgi_finish_request();
+        }
+
         $results = [];
 
         if ($this->fullPurge) {
