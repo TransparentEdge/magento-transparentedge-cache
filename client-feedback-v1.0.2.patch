@@ -1,0 +1,192 @@
+diff --git a/Model/Config.php b/Model/Config.php
+index 9048654..b465ee9 100644
+--- a/Model/Config.php
++++ b/Model/Config.php
+@@ -66,6 +66,7 @@ class Config
+      */
+     public const ADMIN_BYPASS          = 'transparentedge/advanced/admin_bypass';
+     public const DEBUG_MODE            = 'transparentedge/advanced/debug';
++    public const WARMUP_SSL_VERIFY     = 'transparentedge/advanced/warmup_ssl_verify';
+     public const EXCLUDE_URLS          = 'transparentedge/advanced/exclude_urls';
+     public const EXCLUDE_COOKIES       = 'transparentedge/advanced/exclude_cookies';
+ 
+@@ -278,6 +279,13 @@ class Config
+         return $this->scopeConfig->isSetFlag(self::DEBUG_MODE, ScopeInterface::SCOPE_STORE);
+     }
+ 
++    public function isWarmupSslVerify(): bool
++    {
++        // Default to true (verify SSL) if not set
++        $value = $this->scopeConfig->getValue(self::WARMUP_SSL_VERIFY, ScopeInterface::SCOPE_STORE);
++        return $value === null || (bool) $value;
++    }
++
+     public function getExcludeUrls(): array
+     {
+         $urls = (string) $this->scopeConfig->getValue(self::EXCLUDE_URLS, ScopeInterface::SCOPE_STORE);
+diff --git a/Model/TagResolver.php b/Model/TagResolver.php
+index 2d7c84c..c93b9a6 100644
+--- a/Model/TagResolver.php
++++ b/Model/TagResolver.php
+@@ -58,6 +58,48 @@ class TagResolver
+         'global_plugin_list',
+         'reflection',
+         'extension_attributes',
++        'customer',
++        'quote',
++        'checkout',
++        'sales',
++        'wishlist',
++        'review',
++        'newsletter',
++    ];
++
++    /**
++     * Tag prefixes to ignore (third-party modules, payment, sessions, etc.)
++     * Any tag starting with one of these prefixes is dropped before reaching the CDN.
++     * This prevents irrelevant internal tags (payment tokens, customer sessions, etc.)
++     * from being sent as Surrogate-Keys.
++     */
++    private const IGNORE_PREFIXES = [
++        'paycomet_',
++        'payment_',
++        'token_',
++        'quote_',
++        'sales_',
++        'order_',
++        'invoice_',
++        'shipment_',
++        'creditmemo_',
++        'customer_',
++        'wishlist_',
++        'checkout_',
++        'newsletter_',
++        'review_',
++        'search_',
++        'report_',
++        'admin_',
++        'session_',
++        'indexer_',
++        'cron_',
++        'mview_',
++        'sequence_',
++        'inventory_reservation',
++        'targetrule_',
++        'reward_',
++        'giftcard_',
+     ];
+ 
+     /**
+@@ -98,11 +140,18 @@ class TagResolver
+             return null;
+         }
+ 
+-        // Check if this tag should be ignored
++        // Check if this tag should be ignored (exact match)
+         if (in_array($tag, self::IGNORE_TAGS, true)) {
+             return null;
+         }
+ 
++        // Check if this tag matches an ignored prefix (third-party modules, payments, etc.)
++        foreach (self::IGNORE_PREFIXES as $prefix) {
++            if (strpos($tag, $prefix) === 0) {
++                return null;
++            }
++        }
++
+         // Check global tag mapping (exact match, no ID)
+         if (isset(self::GLOBAL_TAG_MAP[$tag])) {
+             return self::GLOBAL_TAG_MAP[$tag];
+@@ -128,9 +177,18 @@ class TagResolver
+             return 'store-group-' . substr($tag, 12);
+         }
+ 
+-        // For any unrecognized tag, pass it through with a "m2-" prefix
+-        // so it's still useful for targeted invalidation
+-        return 'm2-' . preg_replace('/[^a-z0-9_-]/', '-', $tag);
++        // For unrecognized tags: only pass through known Magento FPC-related tags.
++        // Drop everything else to prevent third-party module noise from flooding
++        // the CDN with irrelevant Surrogate-Keys (e.g. 110K payment tokens).
++        $fpcPrefixes = ['cms_', 'cat_', 'catalog_', 'fpc', 'block_'];
++        foreach ($fpcPrefixes as $fpcPrefix) {
++            if (strpos($tag, $fpcPrefix) === 0) {
++                return 'm2-' . preg_replace('/[^a-z0-9_-]/', '-', $tag);
++            }
++        }
++
++        // Unknown tag from third-party module — ignore silently
++        return null;
+     }
+ 
+     /**
+diff --git a/Model/Warmup.php b/Model/Warmup.php
+index d90440c..4116a3a 100644
+--- a/Model/Warmup.php
++++ b/Model/Warmup.php
+@@ -227,7 +227,7 @@ class Warmup
+         }
+ 
+         try {
+-            $client   = $this->clientFactory->create(['config' => ['timeout' => 15]]);
++            $client   = $this->clientFactory->create(['config' => ['timeout' => 15, 'verify' => $this->config->isWarmupSslVerify()]]);
+             $response = $client->request('GET', $sitemapUrl);
+ 
+             if ($response->getStatusCode() === 200) {
+@@ -271,7 +271,7 @@ class Warmup
+     private function parseSitemapFile(string $sitemapUrl, int &$count): void
+     {
+         try {
+-            $client   = $this->clientFactory->create(['config' => ['timeout' => 15]]);
++            $client   = $this->clientFactory->create(['config' => ['timeout' => 15, 'verify' => $this->config->isWarmupSslVerify()]]);
+             $response = $client->request('GET', $sitemapUrl);
+ 
+             if ($response->getStatusCode() === 200) {
+@@ -321,6 +321,7 @@ class Warmup
+                 'timeout'         => 30,
+                 'connect_timeout' => 10,
+                 'http_errors'     => false,
++                'verify'          => $this->config->isWarmupSslVerify(),
+             ],
+         ]);
+ 
+diff --git a/etc/adminhtml/system.xml b/etc/adminhtml/system.xml
+index 2a892c6..3559a40 100644
+--- a/etc/adminhtml/system.xml
++++ b/etc/adminhtml/system.xml
+@@ -402,6 +402,14 @@
+                     <config_path>transparentedge/advanced/debug</config_path>
+                 </field>
+ 
++                <field id="warmup_ssl_verify" translate="label comment" type="select" sortOrder="25"
++                       showInDefault="1" showInWebsite="0" showInStore="0">
++                    <label>Warm-up SSL Verify</label>
++                    <comment>Verify SSL certificates during warm-up. Disable only in pre-production environments with self-signed certificates.</comment>
++                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
++                    <config_path>transparentedge/advanced/warmup_ssl_verify</config_path>
++                </field>
++
+                 <field id="exclude_urls" translate="label comment" type="textarea" sortOrder="30"
+                        showInDefault="1" showInWebsite="1" showInStore="1">
+                     <label>Exclude URLs</label>
+diff --git a/etc/config.xml b/etc/config.xml
+index 63cced0..58e067d 100644
+--- a/etc/config.xml
++++ b/etc/config.xml
+@@ -48,6 +48,7 @@
+             <advanced>
+                 <admin_bypass>1</admin_bypass>
+                 <debug>0</debug>
++                <warmup_ssl_verify>1</warmup_ssl_verify>
+                 <exclude_urls/>
+                 <exclude_cookies/>
+             </advanced>
+diff --git a/i18n/es_ES.csv b/i18n/es_ES.csv
+index a3f34ce..5984a21 100644
+--- a/i18n/es_ES.csv
++++ b/i18n/es_ES.csv
+@@ -192,3 +192,5 @@
+ "Mark content as stale instead of removing it immediately. Prevents cache stampede on high-traffic sites.","Marca el contenido como caducado en lugar de eliminarlo. Previene avalanchas de caché en sitios con mucho tráfico."
+ "Automatically fetch fresh content from origin after invalidation. Ensures the CDN always has a warm copy.","Obtiene automáticamente contenido fresco del origen tras la invalidación. Asegura que la CDN siempre tenga una copia cacheada."
+ "Enable HTML optimizations for better Core Web Vitals scores.","Activa optimizaciones HTML para mejorar las puntuaciones de Core Web Vitals."
++"Warm-up SSL Verify","Verificar SSL en Warm-up"
++"Verify SSL certificates during warm-up. Disable only in pre-production environments with self-signed certificates.","Verifica certificados SSL durante el warm-up. Desactivar solo en entornos de preproducción con certificados autofirmados."

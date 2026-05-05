@@ -48,6 +48,7 @@
             <advanced>
                 <admin_bypass>1</admin_bypass>
                 <debug>0</debug>
+                <warmup_ssl_verify>1</warmup_ssl_verify>
                 <exclude_urls/>
                 <exclude_cookies/>
             </advanced>

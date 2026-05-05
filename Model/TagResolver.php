@@ -58,6 +58,48 @@ class TagResolver
         'global_plugin_list',
         'reflection',
         'extension_attributes',
+        'customer',
+        'quote',
+        'checkout',
+        'sales',
+        'wishlist',
+        'review',
+        'newsletter',
+    ];
+
+    /**
+     * Tag prefixes to ignore (third-party modules, payment, sessions, etc.)
+     * Any tag starting with one of these prefixes is dropped before reaching the CDN.
+     * This prevents irrelevant internal tags (payment tokens, customer sessions, etc.)
+     * from being sent as Surrogate-Keys.
+     */
+    private const IGNORE_PREFIXES = [
+        'paycomet_',
+        'payment_',
+        'token_',
+        'quote_',
+        'sales_',
+        'order_',
+        'invoice_',
+        'shipment_',
+        'creditmemo_',
+        'customer_',
+        'wishlist_',
+        'checkout_',
+        'newsletter_',
+        'review_',
+        'search_',
+        'report_',
+        'admin_',
+        'session_',
+        'indexer_',
+        'cron_',
+        'mview_',
+        'sequence_',
+        'inventory_reservation',
+        'targetrule_',
+        'reward_',
+        'giftcard_',
     ];
 
     /**
@@ -98,9 +140,16 @@ class TagResolver
             return null;
         }
 
-        // Check if this tag should be ignored
+        // Check if this tag should be ignored (exact match)
         if (in_array($tag, self::IGNORE_TAGS, true)) {
             return null;
+        }
+
+        // Check if this tag matches an ignored prefix (third-party modules, payments, etc.)
+        foreach (self::IGNORE_PREFIXES as $prefix) {
+            if (strpos($tag, $prefix) === 0) {
+                return null;
+            }
         }
 
         // Check global tag mapping (exact match, no ID)
@@ -128,9 +177,18 @@ class TagResolver
             return 'store-group-' . substr($tag, 12);
         }
 
-        // For any unrecognized tag, pass it through with a "m2-" prefix
-        // so it's still useful for targeted invalidation
-        return 'm2-' . preg_replace('/[^a-z0-9_-]/', '-', $tag);
+        // For unrecognized tags: only pass through known Magento FPC-related tags.
+        // Drop everything else to prevent third-party module noise from flooding
+        // the CDN with irrelevant Surrogate-Keys (e.g. 110K payment tokens).
+        $fpcPrefixes = ['cms_', 'cat_', 'catalog_', 'fpc', 'block_'];
+        foreach ($fpcPrefixes as $fpcPrefix) {
+            if (strpos($tag, $fpcPrefix) === 0) {
+                return 'm2-' . preg_replace('/[^a-z0-9_-]/', '-', $tag);
+            }
+        }
+
+        // Unknown tag from third-party module — ignore silently
+        return null;
     }
 
     /**

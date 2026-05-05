@@ -227,7 +227,7 @@ class Warmup
         }
 
         try {
-            $client   = $this->clientFactory->create(['config' => ['timeout' => 15]]);
+            $client   = $this->clientFactory->create(['config' => ['timeout' => 15, 'verify' => $this->config->isWarmupSslVerify()]]);
             $response = $client->request('GET', $sitemapUrl);
 
             if ($response->getStatusCode() === 200) {
@@ -271,7 +271,7 @@ class Warmup
     private function parseSitemapFile(string $sitemapUrl, int &$count): void
     {
         try {
-            $client   = $this->clientFactory->create(['config' => ['timeout' => 15]]);
+            $client   = $this->clientFactory->create(['config' => ['timeout' => 15, 'verify' => $this->config->isWarmupSslVerify()]]);
             $response = $client->request('GET', $sitemapUrl);
 
             if ($response->getStatusCode() === 200) {
@@ -321,6 +321,7 @@ class Warmup
                 'timeout'         => 30,
                 'connect_timeout' => 10,
                 'http_errors'     => false,
+                'verify'          => $this->config->isWarmupSslVerify(),
             ],
         ]);
 

@@ -402,6 +402,14 @@
                     <config_path>transparentedge/advanced/debug</config_path>
                 </field>
 
+                <field id="warmup_ssl_verify" translate="label comment" type="select" sortOrder="25"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Warm-up SSL Verify</label>
+                    <comment>Verify SSL certificates during warm-up. Disable only in pre-production environments with self-signed certificates.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/advanced/warmup_ssl_verify</config_path>
+                </field>
+
                 <field id="exclude_urls" translate="label comment" type="textarea" sortOrder="30"
                        showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Exclude URLs</label>

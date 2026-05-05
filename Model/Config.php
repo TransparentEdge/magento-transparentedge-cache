@@ -66,6 +66,7 @@ class Config
      */
     public const ADMIN_BYPASS          = 'transparentedge/advanced/admin_bypass';
     public const DEBUG_MODE            = 'transparentedge/advanced/debug';
+    public const WARMUP_SSL_VERIFY     = 'transparentedge/advanced/warmup_ssl_verify';
     public const EXCLUDE_URLS          = 'transparentedge/advanced/exclude_urls';
     public const EXCLUDE_COOKIES       = 'transparentedge/advanced/exclude_cookies';
 
@@ -276,6 +277,13 @@ class Config
     public function isDebugMode(): bool
     {
         return $this->scopeConfig->isSetFlag(self::DEBUG_MODE, ScopeInterface::SCOPE_STORE);
+    }
+
+    public function isWarmupSslVerify(): bool
+    {
+        // Default to true (verify SSL) if not set
+        $value = $this->scopeConfig->getValue(self::WARMUP_SSL_VERIFY, ScopeInterface::SCOPE_STORE);
+        return $value === null || (bool) $value;
     }
 
     public function getExcludeUrls(): array

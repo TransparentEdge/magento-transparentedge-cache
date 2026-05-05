@@ -192,3 +192,5 @@
 "Mark content as stale instead of removing it immediately. Prevents cache stampede on high-traffic sites.","Marca el contenido como caducado en lugar de eliminarlo. Previene avalanchas de caché en sitios con mucho tráfico."
 "Automatically fetch fresh content from origin after invalidation. Ensures the CDN always has a warm copy.","Obtiene automáticamente contenido fresco del origen tras la invalidación. Asegura que la CDN siempre tenga una copia cacheada."
 "Enable HTML optimizations for better Core Web Vitals scores.","Activa optimizaciones HTML para mejorar las puntuaciones de Core Web Vitals."
+"Warm-up SSL Verify","Verificar SSL en Warm-up"
+"Verify SSL certificates during warm-up. Disable only in pre-production environments with self-signed certificates.","Verifica certificados SSL durante el warm-up. Desactivar solo en entornos de preproducción con certificados autofirmados."
