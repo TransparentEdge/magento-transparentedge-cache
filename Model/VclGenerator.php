@@ -68,6 +68,13 @@ class VclGenerator
         $vcl[] = '';
         $vcl[] = $this->generateVclBackendResponse($host);
 
+        // Speculation Rules: inject header from edge (vcl_deliver)
+        if ($this->config->isSpeculationEnabled()
+            && $this->config->getSpeculationInjection() === 'vcl') {
+            $vcl[] = '';
+            $vcl[] = $this->generateVclDeliver($host);
+        }
+
         return implode("\n", $vcl);
     }
 
@@ -379,6 +386,41 @@ class VclGenerator
      * @param string $host
      * @return string
      */
+    /**
+     * Generate VCL deliver block for Speculation Rules header injection.
+     *
+     * Injects the Speculation-Rules header at the edge, avoiding the need
+     * for the origin to add it. Only applied to HTML responses, excluding
+     * admin, checkout, and API paths.
+     *
+     * @param  string $host
+     * @return string
+     */
+    private function generateVclDeliver(string $host): string
+    {
+        $rulesPath = '/transparentedge/speculationRules/index';
+
+        $l = [];
+        $l[] = '# ─── Speculation Rules (header injection from edge) ───';
+        $l[] = '# BEGIN ' . $host;
+        $l[] = 'sub vcl_deliver {';
+        $l[] = '    if (req.http.host ~ "' . $this->escapeHost($host) . '") {';
+        $l[] = '        if (resp.http.Content-Type ~ "text/html"';
+        $l[] = '            && req.url !~ "^/admin"';
+        $l[] = '            && req.url !~ "^/checkout"';
+        $l[] = '            && req.url !~ "^/customer"';
+        $l[] = '            && req.url !~ "^/rest/"';
+        $l[] = '            && req.url !~ "^/graphql") {';
+        $l[] = sprintf('            set resp.http.Speculation-Rules = {""%s%s""};',
+            'https://' . $host, $rulesPath);
+        $l[] = '        }';
+        $l[] = '    }';
+        $l[] = '}';
+        $l[] = '# END ' . $host;
+
+        return implode("\n", $l);
+    }
+
     private function escapeHost(string $host): string
     {
         return str_replace('.', '\\.', $host);

@@ -58,6 +58,11 @@
                 <lazyload>1</lazyload>
                 <dns_prefetch>1</dns_prefetch>
             </wpo>
+            <speculation>
+                <enabled>0</enabled>
+                <mode>conservative</mode>
+                <injection>php</injection>
+            </speculation>
         </transparentedge>
     </default>
 </config>

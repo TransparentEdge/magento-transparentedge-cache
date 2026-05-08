@@ -359,6 +359,44 @@
             </group>
 
             <!-- ═══════════════════════════════════════════ -->
+            <!-- Speculation Rules                          -->
+            <!-- ═══════════════════════════════════════════ -->
+            <group id="speculation" translate="label comment" type="text" sortOrder="46"
+                   showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Speculation Rules</label>
+                <comment>Instructs the browser to prefetch or prerender pages before the visitor clicks. Dramatically reduces perceived load time on internal navigation. Compatible with Chrome 109+, Edge 120+, Safari 18+.</comment>
+                <depends>
+                    <field id="transparentedge/general/enabled">1</field>
+                </depends>
+
+                <field id="enabled" translate="label comment" type="select" sortOrder="10"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Speculation Rules</label>
+                    <comment>Generate and serve a Speculation Rules JSON for the browser.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/speculation/enabled</config_path>
+                </field>
+
+                <field id="mode" translate="label comment" type="select" sortOrder="20"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Mode</label>
+                    <comment>Conservative: prefetch on click. Balanced: prefetch on hover (recommended). Aggressive: prefetch on viewport + prerender on click.</comment>
+                    <source_model>TransparentEdge\CDN\Model\Config\Source\SpeculationMode</source_model>
+                    <config_path>transparentedge/speculation/mode</config_path>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+
+                <field id="injection" translate="label comment" type="select" sortOrder="30"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Header Injection</label>
+                    <comment>PHP: inject from origin (compatible with all setups). VCL: inject from CDN edge (recommended, requires VCL deployment).</comment>
+                    <source_model>TransparentEdge\CDN\Model\Config\Source\SpeculationInjection</source_model>
+                    <config_path>transparentedge/speculation/injection</config_path>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
+
+            <!-- ═══════════════════════════════════════════ -->
             <!-- Redis Management                           -->
             <!-- ═══════════════════════════════════════════ -->
             <group id="redis" translate="label comment" type="text" sortOrder="48"

@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Frontend route for Speculation Rules JSON endpoint.
+ * URL: /transparentedge/speculationRules/index
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:App/etc/routes.xsd">
+    <router id="standard">
+        <route id="transparentedge" frontName="transparentedge">
+            <module name="TransparentEdge_CDN" />
+        </route>
+    </router>
+</config>

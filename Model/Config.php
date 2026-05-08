@@ -79,6 +79,13 @@ class Config
     public const WPO_DNS_PREFETCH      = 'transparentedge/wpo/dns_prefetch';
 
     /**
+     * Speculation Rules settings
+     */
+    public const SPECULATION_ENABLED   = 'transparentedge/speculation/enabled';
+    public const SPECULATION_MODE      = 'transparentedge/speculation/mode';
+    public const SPECULATION_INJECTION = 'transparentedge/speculation/injection';
+
+    /**
      * Default TTL values (seconds)
      */
     public const DEFAULT_HTML_TTL           = 172800;    // 48h
@@ -329,6 +336,36 @@ class Config
     {
         return $this->isWpoEnabled()
             && $this->scopeConfig->isSetFlag(self::WPO_DNS_PREFETCH, ScopeInterface::SCOPE_STORE);
+    }
+
+    // ──────────────────────────────────────────────
+    // Speculation Rules
+    // ──────────────────────────────────────────────
+
+    public function isSpeculationEnabled(): bool
+    {
+        return $this->isEnabled()
+            && $this->scopeConfig->isSetFlag(self::SPECULATION_ENABLED, ScopeInterface::SCOPE_STORE);
+    }
+
+    public function getSpeculationMode(): string
+    {
+        if (!$this->isSpeculationEnabled()) {
+            return 'off';
+        }
+        $mode = (string) $this->scopeConfig->getValue(self::SPECULATION_MODE, ScopeInterface::SCOPE_STORE);
+        return in_array($mode, ['conservative', 'balanced', 'aggressive'], true) ? $mode : 'conservative';
+    }
+
+    public function getSpeculationInjection(): string
+    {
+        $injection = (string) $this->scopeConfig->getValue(self::SPECULATION_INJECTION, ScopeInterface::SCOPE_STORE);
+        return in_array($injection, ['php', 'vcl'], true) ? $injection : 'php';
+    }
+
+    public function getSpeculationRulesUrl(): string
+    {
+        return $this->getBaseUrl() . '/transparentedge/speculationRules/index';
     }
 
     // ──────────────────────────────────────────────

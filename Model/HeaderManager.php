@@ -114,6 +114,48 @@ class HeaderManager
             // internal catalog structure (product IDs, category IDs, etc.)
             $response->clearHeader(self::HEADER_MAGENTO_TAGS);
         }
+
+        // Speculation Rules header (only for HTML responses via PHP injection)
+        $this->applySpeculationRulesHeader($response);
+    }
+
+    /**
+     * Inject Speculation-Rules header pointing to the JSON endpoint.
+     *
+     * Only applied when:
+     * - Speculation Rules is enabled
+     * - Injection mode is "php" (not "vcl", which handles it at the edge)
+     * - Response is HTML (not static assets, API, or AJAX)
+     *
+     * @param HttpResponse $response
+     */
+    private function applySpeculationRulesHeader(HttpResponse $response): void
+    {
+        if (!$this->config->isSpeculationEnabled()) {
+            return;
+        }
+
+        if ($this->config->getSpeculationInjection() !== 'php') {
+            return;
+        }
+
+        // Only inject in HTML responses
+        $contentType = $response->getHeader('Content-Type');
+        if ($contentType) {
+            $ctValue = is_object($contentType) ? $contentType->getFieldValue() : (string) $contentType;
+            if (stripos($ctValue, 'text/html') === false) {
+                return;
+            }
+        }
+
+        // Don't inject in admin, AJAX, or excluded paths
+        $uri = $this->request->getRequestUri();
+        if ($uri && preg_match('#^/admin|^/rest/|^/graphql|^/checkout/#i', $uri)) {
+            return;
+        }
+
+        $rulesUrl = $this->config->getSpeculationRulesUrl();
+        $response->setHeader('Speculation-Rules', '"' . $rulesUrl . '"', true);
     }
 
     /**

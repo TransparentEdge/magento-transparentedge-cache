@@ -140,6 +140,24 @@
     </type>
 
     <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- Speculation Rules                                      -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+
+    <type name="TransparentEdge\CDN\Model\SpeculationRules\ExclusionCollector">
+        <arguments>
+            <argument name="scopeConfig" xsi:type="object">Magento\Framework\App\Config\ScopeConfigInterface</argument>
+        </arguments>
+    </type>
+
+    <type name="TransparentEdge\CDN\Model\SpeculationRules\Generator">
+        <arguments>
+            <argument name="config" xsi:type="object">TransparentEdge\CDN\Model\Config</argument>
+            <argument name="exclusionCollector" xsi:type="object">TransparentEdge\CDN\Model\SpeculationRules\ExclusionCollector</argument>
+            <argument name="logger" xsi:type="object">TransparentEdge\CDN\Model\Logger</argument>
+        </arguments>
+    </type>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
     <!-- Plugins (interceptors)                                 -->
     <!-- ═══════════════════════════════════════════════════════ -->
 
