@@ -448,6 +448,21 @@
                     <config_path>transparentedge/advanced/warmup_ssl_verify</config_path>
                 </field>
 
+                <field id="log_level" translate="label comment" type="select" sortOrder="26"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Log Level</label>
+                    <comment>Controls verbosity of var/log/transparentedge.log. Info is recommended for production. Debug generates high volume on busy sites.</comment>
+                    <source_model>TransparentEdge\CDN\Model\Config\Source\LogLevel</source_model>
+                    <config_path>transparentedge/advanced/log_level</config_path>
+                </field>
+
+                <field id="health_token" translate="label comment" type="text" sortOrder="27"
+                       showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Health Check Token</label>
+                    <comment>Optional token to protect /transparentedge/status/health. If set, full status requires ?token=VALUE. Leave empty for unrestricted access.</comment>
+                    <config_path>transparentedge/advanced/health_token</config_path>
+                </field>
+
                 <field id="exclude_urls" translate="label comment" type="textarea" sortOrder="30"
                        showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Exclude URLs</label>

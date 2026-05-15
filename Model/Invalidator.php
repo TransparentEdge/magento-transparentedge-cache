@@ -32,6 +32,14 @@ class Invalidator
      */
     private const FULL_PURGE_THRESHOLD = 5000;
 
+    private const IMPORT_COMMANDS = [
+        'import:run', 'import:csv', 'indexer:reindex', 'catalog:images:resize',
+        'setup:upgrade', 'deploy:mode:set',
+    ];
+
+    private static bool $importModeDetected = false;
+    private static bool $importShutdownRegistered = false;
+
     /**
      * @var Config
      */
@@ -110,6 +118,16 @@ class Invalidator
             return;
         }
 
+        if ($this->isImportMode()) {
+            if (!self::$importShutdownRegistered) {
+                self::$importShutdownRegistered = true;
+                $this->fullPurge = true;
+                $this->registerShutdown();
+                $this->logger->info('TransparentEdge: Import mode detected — invalidations suspended. Full ban will execute on completion.');
+            }
+            return;
+        }
+
         $this->pendingTags = array_merge($this->pendingTags, $magentoTags);
         $this->registerShutdown();
 
@@ -157,6 +175,27 @@ class Invalidator
     public function hasPendingTags(): bool
     {
         return !empty($this->pendingTags);
+    }
+
+    /**
+     * Detect CLI import/reindex context to suspend individual invalidations.
+     */
+    private function isImportMode(): bool
+    {
+        if (self::$importModeDetected) {
+            return true;
+        }
+        if (php_sapi_name() !== 'cli') {
+            return false;
+        }
+        $command = implode(' ', $_SERVER['argv'] ?? []);
+        foreach (self::IMPORT_COMMANDS as $cmd) {
+            if (strpos($command, $cmd) !== false) {
+                self::$importModeDetected = true;
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

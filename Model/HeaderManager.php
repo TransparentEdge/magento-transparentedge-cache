@@ -24,7 +24,7 @@ class HeaderManager
     /**
      * Header names
      */
-    private const HEADER_SURROGATE_KEY   = 'Surrogate-Key';
+    private const HEADER_SURROGATE_KEY   = 'Surrogate-Keys';
     private const HEADER_CACHE_CONTROL   = 'Cache-Control';
     private const HEADER_MAGENTO_TAGS    = 'X-Magento-Tags';
     private const HEADER_TE_DEBUG        = 'X-TE-Debug';
@@ -110,9 +110,10 @@ class HeaderManager
         if ($this->config->isDebugMode()) {
             $this->applyDebugHeaders($response);
         } else {
-            // In production, remove X-Magento-Tags to avoid exposing
-            // internal catalog structure (product IDs, category IDs, etc.)
+            // In production, remove internal Magento headers to avoid exposing
+            // catalog structure and cache configuration to the outside
             $response->clearHeader(self::HEADER_MAGENTO_TAGS);
+            $response->clearHeader('X-Magento-Cache-Control');
         }
 
         // Speculation Rules header (only for HTML responses via PHP injection)

@@ -67,6 +67,8 @@ class Config
     public const ADMIN_BYPASS          = 'transparentedge/advanced/admin_bypass';
     public const DEBUG_MODE            = 'transparentedge/advanced/debug';
     public const WARMUP_SSL_VERIFY     = 'transparentedge/advanced/warmup_ssl_verify';
+    public const LOG_LEVEL             = 'transparentedge/advanced/log_level';
+    public const HEALTH_TOKEN          = 'transparentedge/advanced/health_token';
     public const EXCLUDE_URLS          = 'transparentedge/advanced/exclude_urls';
     public const EXCLUDE_COOKIES       = 'transparentedge/advanced/exclude_cookies';
 
@@ -291,6 +293,37 @@ class Config
         // Default to true (verify SSL) if not set
         $value = $this->scopeConfig->getValue(self::WARMUP_SSL_VERIFY, ScopeInterface::SCOPE_STORE);
         return $value === null || (bool) $value;
+    }
+
+    /**
+     * Get configured log level
+     *
+     * @return string error|warning|info|debug
+     */
+    public function getLogLevel(): string
+    {
+        $level = (string) $this->scopeConfig->getValue(self::LOG_LEVEL, ScopeInterface::SCOPE_STORE);
+        return in_array($level, ['error', 'warning', 'info', 'debug'], true) ? $level : 'info';
+    }
+
+    /**
+     * Check if a given log level should be written based on configured threshold.
+     * Hierarchy: error < warning < info < debug
+     *
+     * @param  string $level Level to check
+     * @return bool
+     */
+    public function shouldLog(string $level): bool
+    {
+        $hierarchy = ['error' => 0, 'warning' => 1, 'info' => 2, 'debug' => 3];
+        $configured = $hierarchy[$this->getLogLevel()] ?? 2;
+        $requested = $hierarchy[$level] ?? 2;
+        return $requested <= $configured;
+    }
+
+    public function getHealthToken(): string
+    {
+        return (string) $this->scopeConfig->getValue(self::HEALTH_TOKEN, ScopeInterface::SCOPE_STORE);
     }
 
     public function getExcludeUrls(): array

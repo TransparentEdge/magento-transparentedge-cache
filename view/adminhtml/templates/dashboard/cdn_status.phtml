@@ -1,0 +1,37 @@
+<?php
+/** @var \TransparentEdge\CDN\Block\Adminhtml\Dashboard\CdnStatus $block */
+$configured = $block->isConfigured();
+$enabled = $block->isEnabled();
+$features = $block->getActiveFeatures();
+?>
+<div style="background:#f8fafc;border:1px solid #E2E2E2;border-radius:8px;padding:20px;font-family:'Plus Jakarta Sans',-apple-system,sans-serif;margin-bottom:20px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:16px;font-weight:700;color:#002643;">Transparent Edge CDN</span>
+            <span style="font-size:11px;padding:2px 8px;border-radius:10px;<?= $configured && $enabled ? 'background:#edfdf5;color:#0a6e3f;' : 'background:#fef2f2;color:#991b1b;' ?>">
+                <?= $configured && $enabled ? $block->escapeHtml(__('Connected')) : $block->escapeHtml(__('Not configured')) ?>
+            </span>
+        </div>
+        <span style="font-size:11px;color:#718096;">Company <?= $block->escapeHtml($block->getCompanyId()) ?></span>
+    </div>
+    <?php if ($configured && $enabled): ?>
+        <div style="margin-bottom:16px;">
+            <div style="font-size:12px;color:#5a6a7e;margin-bottom:6px;"><?= $block->escapeHtml(__('Active Features')) ?></div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                <?php foreach ($features as $feature): ?>
+                    <span style="font-size:11px;padding:3px 10px;background:#002643;color:#fff;border-radius:12px;"><?= $block->escapeHtml($feature) ?></span>
+                <?php endforeach; ?>
+                <span style="font-size:11px;padding:3px 10px;background:#f0f4f8;color:#4a5568;border-radius:12px;">Cache: <?= $block->escapeHtml($block->getCacheBackend()) ?></span>
+            </div>
+        </div>
+        <div style="display:flex;gap:8px;border-top:1px solid #E2E2E2;padding-top:12px;">
+            <a href="<?= $block->escapeUrl($block->getConfigUrl()) ?>" style="font-size:12px;color:#00A5A6;text-decoration:none;font-weight:600;"><?= $block->escapeHtml(__('Configuration')) ?></a>
+            <span style="color:#E2E2E2;">|</span>
+            <a href="<?= $block->escapeUrl($block->getPurgeUrl()) ?>" style="font-size:12px;color:#00A5A6;text-decoration:none;font-weight:600;"><?= $block->escapeHtml(__('Purge CDN')) ?></a>
+            <span style="color:#E2E2E2;">|</span>
+            <a href="<?= $block->escapeUrl($block->getDashboardUrl()) ?>" target="_blank" style="font-size:12px;color:#00A5A6;text-decoration:none;font-weight:600;"><?= $block->escapeHtml(__('TE Dashboard')) ?> ↗</a>
+        </div>
+    <?php else: ?>
+        <a href="<?= $block->escapeUrl($block->getConfigUrl()) ?>" style="display:inline-block;padding:8px 18px;background:#00A5A6;color:#fff;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;"><?= $block->escapeHtml(__('Configure CDN')) ?></a>
+    <?php endif; ?>
+</div>

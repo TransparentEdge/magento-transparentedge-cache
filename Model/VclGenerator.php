@@ -54,7 +54,7 @@ class VclGenerator
         $vcl = [];
         $vcl[] = '# ═══════════════════════════════════════════════════════════';
         $vcl[] = '# Transparent Edge CDN — Magento 2 VCL Configuration';
-        $vcl[] = '# Plugin version: 1.0.0';
+        $vcl[] = '# Plugin version: 2.0.0';
         $vcl[] = '# Generated: ' . date('Y-m-d H:i:s');
         $vcl[] = '# Host: ' . $host;
         $vcl[] = '#';
@@ -315,11 +315,12 @@ class VclGenerator
 
         // HTML pages
         $l[] = '';
-        $l[] = '            # HTML pages — controlled TTL with stale directives';
+        $l[] = '            # HTML pages — respect origin TTLs if present, otherwise set defaults';
         $l[] = '            if (urlplus.get_extension() ~ "(?i)(html?)" ||';
         $l[] = '                    beresp.http.Content-Type ~ "text/html") {';
+        $l[] = '                if (beresp.http.Cache-Control !~ "s-maxage") {';
 
-        // Build Cache-Control with stale directives
+        // Build Cache-Control with stale directives (only as fallback)
         $ccParts = [
             sprintf('max-age=%d', $htmlBrowserTtl),
             sprintf('s-maxage=%d', $htmlTtl),
@@ -332,10 +333,11 @@ class VclGenerator
         }
 
         $l[] = sprintf(
-            '                set beresp.http.Cache-Control = "%s";',
+            '                    set beresp.http.Cache-Control = "%s";',
             implode(', ', $ccParts)
         );
-        $l[] = sprintf('                set beresp.ttl = %ds;', $htmlTtl);
+        $l[] = sprintf('                    set beresp.ttl = %ds;', $htmlTtl);
+        $l[] = '                }';
         $l[] = '            }';
 
         // i3 — Vary: Accept for content negotiation

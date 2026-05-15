@@ -110,12 +110,21 @@
         </arguments>
     </type>
 
+    <type name="TransparentEdge\CDN\Model\Optimizer\SpeculationInlineOptimizer">
+        <arguments>
+            <argument name="config" xsi:type="object">TransparentEdge\CDN\Model\Config</argument>
+            <argument name="exclusionCollector" xsi:type="object">TransparentEdge\CDN\Model\SpeculationRules\ExclusionCollector</argument>
+            <argument name="logger" xsi:type="object">TransparentEdge\CDN\Model\Logger</argument>
+        </arguments>
+    </type>
+
     <type name="TransparentEdge\CDN\Model\HtmlOptimizer">
         <arguments>
             <argument name="config" xsi:type="object">TransparentEdge\CDN\Model\Config</argument>
             <argument name="preloadOptimizer" xsi:type="object">TransparentEdge\CDN\Model\Optimizer\PreloadOptimizer</argument>
             <argument name="lazyLoadOptimizer" xsi:type="object">TransparentEdge\CDN\Model\Optimizer\LazyLoadOptimizer</argument>
             <argument name="dnsPrefetchOptimizer" xsi:type="object">TransparentEdge\CDN\Model\Optimizer\DnsPrefetchOptimizer</argument>
+            <argument name="speculationInlineOptimizer" xsi:type="object">TransparentEdge\CDN\Model\Optimizer\SpeculationInlineOptimizer</argument>
             <argument name="request" xsi:type="object">Magento\Framework\App\RequestInterface</argument>
             <argument name="logger" xsi:type="object">TransparentEdge\CDN\Model\Logger</argument>
         </arguments>

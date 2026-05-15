@@ -57,7 +57,7 @@ class Index implements HttpGetActionInterface
         $result->setHttpResponseCode(200);
         $result->setHeader('Content-Type', 'application/speculationrules+json', true);
         $result->setHeader('Cache-Control', 'public, max-age=3600, s-maxage=86400', true);
-        $result->setHeader('Surrogate-Key', 'te-speculation-rules', true);
+        $result->setHeader('Surrogate-Keys', 'te-speculation-rules', true);
         $result->setHeader('X-Content-Type-Options', 'nosniff', true);
         $result->setContents($json);
 

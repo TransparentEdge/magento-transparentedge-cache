@@ -23,64 +23,37 @@ namespace TransparentEdge\CDN\Model;
 use TransparentEdge\CDN\Model\Optimizer\PreloadOptimizer;
 use TransparentEdge\CDN\Model\Optimizer\LazyLoadOptimizer;
 use TransparentEdge\CDN\Model\Optimizer\DnsPrefetchOptimizer;
+use TransparentEdge\CDN\Model\Optimizer\SpeculationInlineOptimizer;
 use Magento\Framework\App\RequestInterface;
 use Magento\Framework\App\Response\Http as HttpResponse;
 use Psr\Log\LoggerInterface;
 
 class HtmlOptimizer
 {
-    /**
-     * @var Config
-     */
     private Config $config;
-
-    /**
-     * @var PreloadOptimizer
-     */
     private PreloadOptimizer $preloadOptimizer;
-
-    /**
-     * @var LazyLoadOptimizer
-     */
     private LazyLoadOptimizer $lazyLoadOptimizer;
-
-    /**
-     * @var DnsPrefetchOptimizer
-     */
     private DnsPrefetchOptimizer $dnsPrefetchOptimizer;
-
-    /**
-     * @var RequestInterface
-     */
+    private SpeculationInlineOptimizer $speculationInlineOptimizer;
     private RequestInterface $request;
-
-    /**
-     * @var LoggerInterface
-     */
     private LoggerInterface $logger;
 
-    /**
-     * @param Config                $config
-     * @param PreloadOptimizer      $preloadOptimizer
-     * @param LazyLoadOptimizer     $lazyLoadOptimizer
-     * @param DnsPrefetchOptimizer  $dnsPrefetchOptimizer
-     * @param RequestInterface      $request
-     * @param LoggerInterface       $logger
-     */
     public function __construct(
-        Config                $config,
-        PreloadOptimizer      $preloadOptimizer,
-        LazyLoadOptimizer     $lazyLoadOptimizer,
-        DnsPrefetchOptimizer  $dnsPrefetchOptimizer,
-        RequestInterface      $request,
-        LoggerInterface       $logger
+        Config                      $config,
+        PreloadOptimizer            $preloadOptimizer,
+        LazyLoadOptimizer           $lazyLoadOptimizer,
+        DnsPrefetchOptimizer        $dnsPrefetchOptimizer,
+        SpeculationInlineOptimizer  $speculationInlineOptimizer,
+        RequestInterface            $request,
+        LoggerInterface             $logger
     ) {
-        $this->config                = $config;
-        $this->preloadOptimizer      = $preloadOptimizer;
-        $this->lazyLoadOptimizer     = $lazyLoadOptimizer;
-        $this->dnsPrefetchOptimizer  = $dnsPrefetchOptimizer;
-        $this->request               = $request;
-        $this->logger                = $logger;
+        $this->config                       = $config;
+        $this->preloadOptimizer             = $preloadOptimizer;
+        $this->lazyLoadOptimizer            = $lazyLoadOptimizer;
+        $this->dnsPrefetchOptimizer         = $dnsPrefetchOptimizer;
+        $this->speculationInlineOptimizer   = $speculationInlineOptimizer;
+        $this->request                      = $request;
+        $this->logger                       = $logger;
     }
 
     /**
@@ -118,14 +91,20 @@ class HtmlOptimizer
             $html = $this->lazyLoadOptimizer->process($html);
         }
 
+        // 4. Speculation Rules inline — contextual prerender/prefetch per page type
+        //    Runs independently of WPO settings (has its own enabled check)
+        $html = $this->speculationInlineOptimizer->process($html);
+
         // Only update body if something changed
         if ($html !== $response->getBody()) {
             $response->setBody($html);
 
-            $this->logger->debug('TransparentEdge: HTML optimized', [
-                'original_size'  => $originalLength,
-                'optimized_size' => strlen($html),
-            ]);
+            if ($this->config->shouldLog('debug')) {
+                $this->logger->debug('TransparentEdge: HTML optimized', [
+                    'original_size'  => $originalLength,
+                    'optimized_size' => strlen($html),
+                ]);
+            }
         }
     }
 

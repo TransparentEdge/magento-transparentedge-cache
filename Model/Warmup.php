@@ -340,10 +340,12 @@ class Warmup
             'concurrency' => $concurrency,
             'fulfilled'   => function ($response, $index) use (&$success, $urls) {
                 $success++;
-                $this->logger->debug('TransparentEdge: Warm-up OK', [
-                    'url'    => $urls[$index] ?? 'unknown',
-                    'status' => $response->getStatusCode(),
-                ]);
+                if ($this->config->shouldLog('debug')) {
+                    $this->logger->debug('TransparentEdge: Warm-up OK', [
+                        'url'    => $urls[$index] ?? 'unknown',
+                        'status' => $response->getStatusCode(),
+                    ]);
+                }
             },
             'rejected' => function ($reason, $index) use (&$failed, $urls) {
                 $failed++;

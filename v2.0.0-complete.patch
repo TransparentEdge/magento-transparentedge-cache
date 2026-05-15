@@ -1,0 +1,447 @@
+diff --git a/Controller/SpeculationRules/Index.php b/Controller/SpeculationRules/Index.php
+index 926001f..ff4f417 100644
+--- a/Controller/SpeculationRules/Index.php
++++ b/Controller/SpeculationRules/Index.php
+@@ -57,7 +57,7 @@ class Index implements HttpGetActionInterface
+         $result->setHttpResponseCode(200);
+         $result->setHeader('Content-Type', 'application/speculationrules+json', true);
+         $result->setHeader('Cache-Control', 'public, max-age=3600, s-maxage=86400', true);
+-        $result->setHeader('Surrogate-Key', 'te-speculation-rules', true);
++        $result->setHeader('Surrogate-Keys', 'te-speculation-rules', true);
+         $result->setHeader('X-Content-Type-Options', 'nosniff', true);
+         $result->setContents($json);
+ 
+diff --git a/Model/Config.php b/Model/Config.php
+index d64c395..32b3136 100644
+--- a/Model/Config.php
++++ b/Model/Config.php
+@@ -67,6 +67,8 @@ class Config
+     public const ADMIN_BYPASS          = 'transparentedge/advanced/admin_bypass';
+     public const DEBUG_MODE            = 'transparentedge/advanced/debug';
+     public const WARMUP_SSL_VERIFY     = 'transparentedge/advanced/warmup_ssl_verify';
++    public const LOG_LEVEL             = 'transparentedge/advanced/log_level';
++    public const HEALTH_TOKEN          = 'transparentedge/advanced/health_token';
+     public const EXCLUDE_URLS          = 'transparentedge/advanced/exclude_urls';
+     public const EXCLUDE_COOKIES       = 'transparentedge/advanced/exclude_cookies';
+ 
+@@ -293,6 +295,37 @@ class Config
+         return $value === null || (bool) $value;
+     }
+ 
++    /**
++     * Get configured log level
++     *
++     * @return string error|warning|info|debug
++     */
++    public function getLogLevel(): string
++    {
++        $level = (string) $this->scopeConfig->getValue(self::LOG_LEVEL, ScopeInterface::SCOPE_STORE);
++        return in_array($level, ['error', 'warning', 'info', 'debug'], true) ? $level : 'info';
++    }
++
++    /**
++     * Check if a given log level should be written based on configured threshold.
++     * Hierarchy: error < warning < info < debug
++     *
++     * @param  string $level Level to check
++     * @return bool
++     */
++    public function shouldLog(string $level): bool
++    {
++        $hierarchy = ['error' => 0, 'warning' => 1, 'info' => 2, 'debug' => 3];
++        $configured = $hierarchy[$this->getLogLevel()] ?? 2;
++        $requested = $hierarchy[$level] ?? 2;
++        return $requested <= $configured;
++    }
++
++    public function getHealthToken(): string
++    {
++        return (string) $this->scopeConfig->getValue(self::HEALTH_TOKEN, ScopeInterface::SCOPE_STORE);
++    }
++
+     public function getExcludeUrls(): array
+     {
+         $urls = (string) $this->scopeConfig->getValue(self::EXCLUDE_URLS, ScopeInterface::SCOPE_STORE);
+diff --git a/Model/HeaderManager.php b/Model/HeaderManager.php
+index a42f65e..af75908 100644
+--- a/Model/HeaderManager.php
++++ b/Model/HeaderManager.php
+@@ -24,7 +24,7 @@ class HeaderManager
+     /**
+      * Header names
+      */
+-    private const HEADER_SURROGATE_KEY   = 'Surrogate-Key';
++    private const HEADER_SURROGATE_KEY   = 'Surrogate-Keys';
+     private const HEADER_CACHE_CONTROL   = 'Cache-Control';
+     private const HEADER_MAGENTO_TAGS    = 'X-Magento-Tags';
+     private const HEADER_TE_DEBUG        = 'X-TE-Debug';
+@@ -110,9 +110,10 @@ class HeaderManager
+         if ($this->config->isDebugMode()) {
+             $this->applyDebugHeaders($response);
+         } else {
+-            // In production, remove X-Magento-Tags to avoid exposing
+-            // internal catalog structure (product IDs, category IDs, etc.)
++            // In production, remove internal Magento headers to avoid exposing
++            // catalog structure and cache configuration to the outside
+             $response->clearHeader(self::HEADER_MAGENTO_TAGS);
++            $response->clearHeader('X-Magento-Cache-Control');
+         }
+ 
+         // Speculation Rules header (only for HTML responses via PHP injection)
+diff --git a/Model/HtmlOptimizer.php b/Model/HtmlOptimizer.php
+index 2b4dca3..7da9d0f 100644
+--- a/Model/HtmlOptimizer.php
++++ b/Model/HtmlOptimizer.php
+@@ -23,64 +23,37 @@ namespace TransparentEdge\CDN\Model;
+ use TransparentEdge\CDN\Model\Optimizer\PreloadOptimizer;
+ use TransparentEdge\CDN\Model\Optimizer\LazyLoadOptimizer;
+ use TransparentEdge\CDN\Model\Optimizer\DnsPrefetchOptimizer;
++use TransparentEdge\CDN\Model\Optimizer\SpeculationInlineOptimizer;
+ use Magento\Framework\App\RequestInterface;
+ use Magento\Framework\App\Response\Http as HttpResponse;
+ use Psr\Log\LoggerInterface;
+ 
+ class HtmlOptimizer
+ {
+-    /**
+-     * @var Config
+-     */
+     private Config $config;
+-
+-    /**
+-     * @var PreloadOptimizer
+-     */
+     private PreloadOptimizer $preloadOptimizer;
+-
+-    /**
+-     * @var LazyLoadOptimizer
+-     */
+     private LazyLoadOptimizer $lazyLoadOptimizer;
+-
+-    /**
+-     * @var DnsPrefetchOptimizer
+-     */
+     private DnsPrefetchOptimizer $dnsPrefetchOptimizer;
+-
+-    /**
+-     * @var RequestInterface
+-     */
++    private SpeculationInlineOptimizer $speculationInlineOptimizer;
+     private RequestInterface $request;
+-
+-    /**
+-     * @var LoggerInterface
+-     */
+     private LoggerInterface $logger;
+ 
+-    /**
+-     * @param Config                $config
+-     * @param PreloadOptimizer      $preloadOptimizer
+-     * @param LazyLoadOptimizer     $lazyLoadOptimizer
+-     * @param DnsPrefetchOptimizer  $dnsPrefetchOptimizer
+-     * @param RequestInterface      $request
+-     * @param LoggerInterface       $logger
+-     */
+     public function __construct(
+-        Config                $config,
+-        PreloadOptimizer      $preloadOptimizer,
+-        LazyLoadOptimizer     $lazyLoadOptimizer,
+-        DnsPrefetchOptimizer  $dnsPrefetchOptimizer,
+-        RequestInterface      $request,
+-        LoggerInterface       $logger
++        Config                      $config,
++        PreloadOptimizer            $preloadOptimizer,
++        LazyLoadOptimizer           $lazyLoadOptimizer,
++        DnsPrefetchOptimizer        $dnsPrefetchOptimizer,
++        SpeculationInlineOptimizer  $speculationInlineOptimizer,
++        RequestInterface            $request,
++        LoggerInterface             $logger
+     ) {
+-        $this->config                = $config;
+-        $this->preloadOptimizer      = $preloadOptimizer;
+-        $this->lazyLoadOptimizer     = $lazyLoadOptimizer;
+-        $this->dnsPrefetchOptimizer  = $dnsPrefetchOptimizer;
+-        $this->request               = $request;
+-        $this->logger                = $logger;
++        $this->config                       = $config;
++        $this->preloadOptimizer             = $preloadOptimizer;
++        $this->lazyLoadOptimizer            = $lazyLoadOptimizer;
++        $this->dnsPrefetchOptimizer         = $dnsPrefetchOptimizer;
++        $this->speculationInlineOptimizer   = $speculationInlineOptimizer;
++        $this->request                      = $request;
++        $this->logger                       = $logger;
+     }
+ 
+     /**
+@@ -118,14 +91,20 @@ class HtmlOptimizer
+             $html = $this->lazyLoadOptimizer->process($html);
+         }
+ 
++        // 4. Speculation Rules inline — contextual prerender/prefetch per page type
++        //    Runs independently of WPO settings (has its own enabled check)
++        $html = $this->speculationInlineOptimizer->process($html);
++
+         // Only update body if something changed
+         if ($html !== $response->getBody()) {
+             $response->setBody($html);
+ 
+-            $this->logger->debug('TransparentEdge: HTML optimized', [
+-                'original_size'  => $originalLength,
+-                'optimized_size' => strlen($html),
+-            ]);
++            if ($this->config->shouldLog('debug')) {
++                $this->logger->debug('TransparentEdge: HTML optimized', [
++                    'original_size'  => $originalLength,
++                    'optimized_size' => strlen($html),
++                ]);
++            }
+         }
+     }
+ 
+diff --git a/Model/Invalidator.php b/Model/Invalidator.php
+index 404c06c..e1cd6da 100644
+--- a/Model/Invalidator.php
++++ b/Model/Invalidator.php
+@@ -32,6 +32,14 @@ class Invalidator
+      */
+     private const FULL_PURGE_THRESHOLD = 5000;
+ 
++    private const IMPORT_COMMANDS = [
++        'import:run', 'import:csv', 'indexer:reindex', 'catalog:images:resize',
++        'setup:upgrade', 'deploy:mode:set',
++    ];
++
++    private static bool $importModeDetected = false;
++    private static bool $importShutdownRegistered = false;
++
+     /**
+      * @var Config
+      */
+@@ -110,6 +118,16 @@ class Invalidator
+             return;
+         }
+ 
++        if ($this->isImportMode()) {
++            if (!self::$importShutdownRegistered) {
++                self::$importShutdownRegistered = true;
++                $this->fullPurge = true;
++                $this->registerShutdown();
++                $this->logger->info('TransparentEdge: Import mode detected — invalidations suspended. Full ban will execute on completion.');
++            }
++            return;
++        }
++
+         $this->pendingTags = array_merge($this->pendingTags, $magentoTags);
+         $this->registerShutdown();
+ 
+@@ -159,6 +177,27 @@ class Invalidator
+         return !empty($this->pendingTags);
+     }
+ 
++    /**
++     * Detect CLI import/reindex context to suspend individual invalidations.
++     */
++    private function isImportMode(): bool
++    {
++        if (self::$importModeDetected) {
++            return true;
++        }
++        if (php_sapi_name() !== 'cli') {
++            return false;
++        }
++        $command = implode(' ', $_SERVER['argv'] ?? []);
++        foreach (self::IMPORT_COMMANDS as $cmd) {
++            if (strpos($command, $cmd) !== false) {
++                self::$importModeDetected = true;
++                return true;
++            }
++        }
++        return false;
++    }
++
+     /**
+      * Execute all pending invalidations immediately
+      *
+diff --git a/Model/VclGenerator.php b/Model/VclGenerator.php
+index 490a0b9..c64b770 100644
+--- a/Model/VclGenerator.php
++++ b/Model/VclGenerator.php
+@@ -54,7 +54,7 @@ class VclGenerator
+         $vcl = [];
+         $vcl[] = '# ═══════════════════════════════════════════════════════════';
+         $vcl[] = '# Transparent Edge CDN — Magento 2 VCL Configuration';
+-        $vcl[] = '# Plugin version: 1.0.0';
++        $vcl[] = '# Plugin version: 2.0.0';
+         $vcl[] = '# Generated: ' . date('Y-m-d H:i:s');
+         $vcl[] = '# Host: ' . $host;
+         $vcl[] = '#';
+@@ -315,11 +315,12 @@ class VclGenerator
+ 
+         // HTML pages
+         $l[] = '';
+-        $l[] = '            # HTML pages — controlled TTL with stale directives';
++        $l[] = '            # HTML pages — respect origin TTLs if present, otherwise set defaults';
+         $l[] = '            if (urlplus.get_extension() ~ "(?i)(html?)" ||';
+         $l[] = '                    beresp.http.Content-Type ~ "text/html") {';
++        $l[] = '                if (beresp.http.Cache-Control !~ "s-maxage") {';
+ 
+-        // Build Cache-Control with stale directives
++        // Build Cache-Control with stale directives (only as fallback)
+         $ccParts = [
+             sprintf('max-age=%d', $htmlBrowserTtl),
+             sprintf('s-maxage=%d', $htmlTtl),
+@@ -332,10 +333,11 @@ class VclGenerator
+         }
+ 
+         $l[] = sprintf(
+-            '                set beresp.http.Cache-Control = "%s";',
++            '                    set beresp.http.Cache-Control = "%s";',
+             implode(', ', $ccParts)
+         );
+-        $l[] = sprintf('                set beresp.ttl = %ds;', $htmlTtl);
++        $l[] = sprintf('                    set beresp.ttl = %ds;', $htmlTtl);
++        $l[] = '                }';
+         $l[] = '            }';
+ 
+         // i3 — Vary: Accept for content negotiation
+diff --git a/Model/Warmup.php b/Model/Warmup.php
+index 4116a3a..8468134 100644
+--- a/Model/Warmup.php
++++ b/Model/Warmup.php
+@@ -340,10 +340,12 @@ class Warmup
+             'concurrency' => $concurrency,
+             'fulfilled'   => function ($response, $index) use (&$success, $urls) {
+                 $success++;
+-                $this->logger->debug('TransparentEdge: Warm-up OK', [
+-                    'url'    => $urls[$index] ?? 'unknown',
+-                    'status' => $response->getStatusCode(),
+-                ]);
++                if ($this->config->shouldLog('debug')) {
++                    $this->logger->debug('TransparentEdge: Warm-up OK', [
++                        'url'    => $urls[$index] ?? 'unknown',
++                        'status' => $response->getStatusCode(),
++                    ]);
++                }
+             },
+             'rejected' => function ($reason, $index) use (&$failed, $urls) {
+                 $failed++;
+diff --git a/composer.json b/composer.json
+index ed49e13..12c05c7 100644
+--- a/composer.json
++++ b/composer.json
+@@ -23,7 +23,7 @@
+         "guzzlehttp/guzzle": "^7.5"
+     },
+     "type": "magento2-module",
+-    "version": "1.0.0",
++    "version": "2.0.0",
+     "license": "MIT",
+     "homepage": "https://github.com/TransparentEdge/magento-transparentedge-cache",
+     "support": {
+diff --git a/etc/adminhtml/system.xml b/etc/adminhtml/system.xml
+index db56472..bb15a2f 100644
+--- a/etc/adminhtml/system.xml
++++ b/etc/adminhtml/system.xml
+@@ -448,6 +448,21 @@
+                     <config_path>transparentedge/advanced/warmup_ssl_verify</config_path>
+                 </field>
+ 
++                <field id="log_level" translate="label comment" type="select" sortOrder="26"
++                       showInDefault="1" showInWebsite="0" showInStore="0">
++                    <label>Log Level</label>
++                    <comment>Controls verbosity of var/log/transparentedge.log. Info is recommended for production. Debug generates high volume on busy sites.</comment>
++                    <source_model>TransparentEdge\CDN\Model\Config\Source\LogLevel</source_model>
++                    <config_path>transparentedge/advanced/log_level</config_path>
++                </field>
++
++                <field id="health_token" translate="label comment" type="text" sortOrder="27"
++                       showInDefault="1" showInWebsite="0" showInStore="0">
++                    <label>Health Check Token</label>
++                    <comment>Optional token to protect /transparentedge/status/health. If set, full status requires ?token=VALUE. Leave empty for unrestricted access.</comment>
++                    <config_path>transparentedge/advanced/health_token</config_path>
++                </field>
++
+                 <field id="exclude_urls" translate="label comment" type="textarea" sortOrder="30"
+                        showInDefault="1" showInWebsite="1" showInStore="1">
+                     <label>Exclude URLs</label>
+diff --git a/etc/config.xml b/etc/config.xml
+index e730b1f..17cd53c 100644
+--- a/etc/config.xml
++++ b/etc/config.xml
+@@ -49,6 +49,7 @@
+                 <admin_bypass>1</admin_bypass>
+                 <debug>0</debug>
+                 <warmup_ssl_verify>1</warmup_ssl_verify>
++                <log_level>info</log_level>
+                 <exclude_urls/>
+                 <exclude_cookies/>
+             </advanced>
+diff --git a/etc/di.xml b/etc/di.xml
+index d6cf67b..ef29839 100644
+--- a/etc/di.xml
++++ b/etc/di.xml
+@@ -110,12 +110,21 @@
+         </arguments>
+     </type>
+ 
++    <type name="TransparentEdge\CDN\Model\Optimizer\SpeculationInlineOptimizer">
++        <arguments>
++            <argument name="config" xsi:type="object">TransparentEdge\CDN\Model\Config</argument>
++            <argument name="exclusionCollector" xsi:type="object">TransparentEdge\CDN\Model\SpeculationRules\ExclusionCollector</argument>
++            <argument name="logger" xsi:type="object">TransparentEdge\CDN\Model\Logger</argument>
++        </arguments>
++    </type>
++
+     <type name="TransparentEdge\CDN\Model\HtmlOptimizer">
+         <arguments>
+             <argument name="config" xsi:type="object">TransparentEdge\CDN\Model\Config</argument>
+             <argument name="preloadOptimizer" xsi:type="object">TransparentEdge\CDN\Model\Optimizer\PreloadOptimizer</argument>
+             <argument name="lazyLoadOptimizer" xsi:type="object">TransparentEdge\CDN\Model\Optimizer\LazyLoadOptimizer</argument>
+             <argument name="dnsPrefetchOptimizer" xsi:type="object">TransparentEdge\CDN\Model\Optimizer\DnsPrefetchOptimizer</argument>
++            <argument name="speculationInlineOptimizer" xsi:type="object">TransparentEdge\CDN\Model\Optimizer\SpeculationInlineOptimizer</argument>
+             <argument name="request" xsi:type="object">Magento\Framework\App\RequestInterface</argument>
+             <argument name="logger" xsi:type="object">TransparentEdge\CDN\Model\Logger</argument>
+         </arguments>
+diff --git a/etc/module.xml b/etc/module.xml
+index 232011b..7525309 100644
+--- a/etc/module.xml
++++ b/etc/module.xml
+@@ -11,7 +11,7 @@
+ -->
+ <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="urn:magento:framework:Module/etc/module.xsd">
+-    <module name="TransparentEdge_CDN" setup_version="1.0.0">
++    <module name="TransparentEdge_CDN" setup_version="2.0.0">
+         <sequence>
+             <module name="Magento_PageCache"/>
+             <module name="Magento_Store"/>
+diff --git a/i18n/es_ES.csv b/i18n/es_ES.csv
+index beb8d3d..c303b17 100644
+--- a/i18n/es_ES.csv
++++ b/i18n/es_ES.csv
+@@ -93,7 +93,6 @@
+ "Accelerate your Magento store by using Redis for cache and sessions","Acelera tu tienda Magento usando Redis para caché y sesiones"
+ "Redis Status","Estado de Redis"
+ "Connection","Conexión"
+-"Connected","Conectado"
+ "Not available","No disponible"
+ "Host","Host"
+ "Version","Versión"
+@@ -207,3 +206,17 @@
+ "Aggressive (prefetch on viewport + prerender on click)","Agresivo (prefetch en viewport + prerender al hacer clic)"
+ "PHP (origin) — compatible with all setups","PHP (origen) — compatible con todos los entornos"
+ "VCL (edge) — recommended, requires VCL deployment","VCL (edge) — recomendado, requiere despliegue de VCL"
++"Log Level","Nivel de Log"
++"Controls verbosity of var/log/transparentedge.log. Info is recommended for production. Debug generates high volume on busy sites.","Controla la verbosidad de var/log/transparentedge.log. Info es lo recomendado para producción. Debug genera mucho volumen en sitios con tráfico."
++"Error — only errors","Error — solo errores"
++"Warning — errors + warnings","Warning — errores + avisos"
++"Info — standard (recommended)","Info — estándar (recomendado)"
++"Debug — verbose (development only)","Debug — detallado (solo desarrollo)"
++"Health Check Token","Token de Health Check"
++"Optional token to protect /transparentedge/status/health. If set, full status requires ?token=VALUE. Leave empty for unrestricted access.","Token opcional para proteger /transparentedge/status/health. Si se configura, el estado completo requiere ?token=VALOR. Déjalo vacío para acceso sin restricción."
++"Connected","Conectado"
++"Not configured","No configurado"
++"Active Features","Funcionalidades Activas"
++"Purge CDN","Purgar CDN"
++"TE Dashboard","Dashboard TE"
++"Configure CDN","Configurar CDN"
