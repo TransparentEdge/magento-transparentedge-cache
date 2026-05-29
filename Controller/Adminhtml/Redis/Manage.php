@@ -58,7 +58,11 @@ class Manage extends Action
                     $password = !empty($params['password']) ? $params['password'] : null;
                     $data = $this->detector->detect($host, $port, $password);
                     $data['status'] = $this->manager->getStatus();
-                    $data['recommended_dbs'] = $this->detector->recommendDatabases($data['databases'] ?? []);
+                    $maxDbs = $data['max_databases'] ?? 16;
+                    $data['recommended_dbs'] = $this->detector->recommendDatabases(
+                        $data['databases'] ?? [],
+                        $maxDbs
+                    );
                     return $result->setData($data);
 
                 case 'status':

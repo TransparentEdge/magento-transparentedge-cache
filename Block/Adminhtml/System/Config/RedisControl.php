@@ -47,6 +47,37 @@ class RedisControl extends Field
         return $this->redisManager->getStatus();
     }
 
+    /**
+     * Get the currently configured Redis password from env.php (if any)
+     * This pre-fills the password field so users don't have to re-enter it.
+     *
+     * @return string
+     */
+    public function getCurrentRedisPassword(): string
+    {
+        return $this->redisManager->getCurrentPassword();
+    }
+
+    /**
+     * Get the currently configured Redis host from env.php
+     *
+     * @return string
+     */
+    public function getCurrentRedisHost(): string
+    {
+        return $this->redisManager->getCurrentHost();
+    }
+
+    /**
+     * Get the currently configured Redis port from env.php
+     *
+     * @return int
+     */
+    public function getCurrentRedisPort(): int
+    {
+        return $this->redisManager->getCurrentPort();
+    }
+
     protected function _getElementHtml(AbstractElement $element): string
     {
         return $this->_toHtml();

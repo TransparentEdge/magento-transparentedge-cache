@@ -472,4 +472,64 @@ class RedisManager
         }
         return (string) __('File-based (default)');
     }
+
+    /**
+     * Get the currently configured Redis password from env.php
+     *
+     * @return string
+     */
+    public function getCurrentPassword(): string
+    {
+        try {
+            $env = $this->readEnvPhp();
+            // Check default cache backend first
+            $password = $env['cache']['frontend']['default']['backend_options']['password'] ?? '';
+            if (!empty($password)) {
+                return $password;
+            }
+            // Check FPC backend
+            $password = $env['cache']['frontend']['page_cache']['backend_options']['password'] ?? '';
+            if (!empty($password)) {
+                return $password;
+            }
+            // Check session backend
+            return $env['session']['redis']['password'] ?? '';
+        } catch (\Exception $e) {
+            return '';
+        }
+    }
+
+    /**
+     * Get the currently configured Redis host from env.php
+     *
+     * @return string
+     */
+    public function getCurrentHost(): string
+    {
+        try {
+            $env = $this->readEnvPhp();
+            return $env['cache']['frontend']['default']['backend_options']['server']
+                ?? $env['cache']['frontend']['page_cache']['backend_options']['server']
+                ?? '127.0.0.1';
+        } catch (\Exception $e) {
+            return '127.0.0.1';
+        }
+    }
+
+    /**
+     * Get the currently configured Redis port from env.php
+     *
+     * @return int
+     */
+    public function getCurrentPort(): int
+    {
+        try {
+            $env = $this->readEnvPhp();
+            return (int) ($env['cache']['frontend']['default']['backend_options']['port']
+                ?? $env['cache']['frontend']['page_cache']['backend_options']['port']
+                ?? 6379);
+        } catch (\Exception $e) {
+            return 6379;
+        }
+    }
 }

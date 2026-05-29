@@ -212,6 +212,14 @@ class RedisDetector
                 }
             }
 
+            // CONFIG GET databases (max number of databases available)
+            fwrite($fp, "CONFIG GET databases\r\n");
+            $configResponse = $this->readArrayResponse($fp);
+            $result['max_databases'] = 16; // default
+            if (!empty($configResponse) && isset($configResponse[1])) {
+                $result['max_databases'] = (int) $configResponse[1];
+            }
+
             fclose($fp);
 
             $result['available'] = true;
@@ -268,6 +276,46 @@ class RedisDetector
         }
 
         return $data;
+    }
+
+    /**
+     * Read a Redis array response (for CONFIG GET)
+     *
+     * @param  resource $fp
+     * @return array
+     */
+    private function readArrayResponse($fp): array
+    {
+        $line = fgets($fp, 512);
+        if ($line === false || $line[0] !== '*') {
+            return [];
+        }
+
+        $count = (int) substr($line, 1);
+        $items = [];
+
+        for ($i = 0; $i < $count; $i++) {
+            $sizeLine = fgets($fp, 512);
+            if ($sizeLine === false || $sizeLine[0] !== '$') {
+                break;
+            }
+            $size = (int) substr($sizeLine, 1);
+            if ($size <= 0) {
+                $items[] = '';
+                continue;
+            }
+            $val = '';
+            $rem = $size + 2;
+            while ($rem > 0) {
+                $chunk = fread($fp, min($rem, 8192));
+                if ($chunk === false) break;
+                $val .= $chunk;
+                $rem -= strlen($chunk);
+            }
+            $items[] = trim($val);
+        }
+
+        return $items;
     }
 
     /**
@@ -336,23 +384,36 @@ class RedisDetector
      * @param  array $usedDatabases Array of ['db' => int, 'keys' => int]
      * @return array{cache: int, fpc: int, session: int}
      */
-    public function recommendDatabases(array $usedDatabases): array
+    /**
+     * Recommend database assignments respecting Redis max databases config.
+     *
+     * @param  array $usedDatabases Currently used databases from INFO keyspace
+     * @param  int   $maxDatabases  Max databases from CONFIG GET databases
+     * @return array [cache => int, fpc => int, session => int]
+     */
+    public function recommendDatabases(array $usedDatabases, int $maxDatabases = 16): array
     {
         $usedDbs = array_column($usedDatabases, 'db');
 
-        // Magento recommended defaults
-        $defaults = [
-            'cache'   => 0,
-            'fpc'     => 2,
-            'session' => 3,
-        ];
+        // Ideal Magento defaults
+        $defaults = ['cache' => 0, 'fpc' => 2, 'session' => 3];
 
-        // If defaults are not in use, use them
-        $recommendations = [];
-        foreach ($defaults as $type => $db) {
-            $recommendations[$type] = $db;
+        // If Redis has limited databases, fit within the range
+        if ($maxDatabases < 4) {
+            if ($maxDatabases >= 3) {
+                $defaults = ['cache' => 0, 'fpc' => 1, 'session' => 2];
+            } elseif ($maxDatabases >= 2) {
+                $defaults = ['cache' => 0, 'fpc' => 1, 'session' => -1]; // no session
+            } else {
+                $defaults = ['cache' => 0, 'fpc' => 0, 'session' => -1]; // shared db
+            }
         }
 
-        return $recommendations;
+        $this->logger->debug('TransparentEdge: Redis DB recommendations', [
+            'max_databases' => $maxDatabases,
+            'recommendations' => $defaults,
+        ]);
+
+        return $defaults;
     }
 }

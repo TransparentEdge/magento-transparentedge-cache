@@ -14,15 +14,15 @@ $status = $block->getRedisStatus();
         <div style="display: flex; gap: 8px; align-items: end; flex-wrap: wrap;">
             <div>
                 <label style="font-size: 12px; color: #5a6a7e; display: block; margin-bottom: 4px;"><?= $block->escapeHtml(__('Host')) ?></label>
-                <input type="text" id="te-redis-host" value="127.0.0.1" style="padding: 8px 10px; border: 1px solid #d1d9e0; border-radius: 6px; font-size: 13px; width: 160px;"/>
+                <input type="text" id="te-redis-host" value="<?= $block->escapeHtml($block->getCurrentRedisHost()) ?>" style="padding: 8px 10px; border: 1px solid #d1d9e0; border-radius: 6px; font-size: 13px; width: 160px;"/>
             </div>
             <div>
                 <label style="font-size: 12px; color: #5a6a7e; display: block; margin-bottom: 4px;"><?= $block->escapeHtml(__('Port')) ?></label>
-                <input type="text" id="te-redis-port" value="6379" style="padding: 8px 10px; border: 1px solid #d1d9e0; border-radius: 6px; font-size: 13px; width: 70px;"/>
+                <input type="text" id="te-redis-port" value="<?= $block->escapeHtml((string) $block->getCurrentRedisPort()) ?>" style="padding: 8px 10px; border: 1px solid #d1d9e0; border-radius: 6px; font-size: 13px; width: 70px;"/>
             </div>
             <div>
                 <label style="font-size: 12px; color: #5a6a7e; display: block; margin-bottom: 4px;"><?= $block->escapeHtml(__('Password')) ?></label>
-                <input type="password" id="te-redis-password" value="" placeholder="<?= $block->escapeHtml(__('(optional)')) ?>" style="padding: 8px 10px; border: 1px solid #d1d9e0; border-radius: 6px; font-size: 13px; width: 140px;"/>
+                <input type="password" id="te-redis-password" value="<?= $block->escapeHtml($block->getCurrentRedisPassword()) ?>" placeholder="<?= $block->escapeHtml(__('(optional)')) ?>" style="padding: 8px 10px; border: 1px solid #d1d9e0; border-radius: 6px; font-size: 13px; width: 140px;"/>
             </div>
             <button type="button" id="te-redis-detect" style="padding: 8px 18px; background: #00A5A6; color: #fff; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;">
                 <?= $block->escapeHtml(__('Detect')) ?>
@@ -136,9 +136,25 @@ require(['jquery'], function ($) {
             type: 'POST',
             dataType: 'json',
             data: data,
-            success: callback,
-            error: function () {
-                showResult(i18n.networkError, false);
+            success: function (res) {
+                if (res.success === false && res.message) {
+                    showResult(res.message, false);
+                }
+                callback(res);
+            },
+            error: function (xhr, status, error) {
+                var msg = i18n.networkError;
+                if (xhr.status) {
+                    msg += ' (HTTP ' + xhr.status + ')';
+                }
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    msg = xhr.responseJSON.message;
+                } else if (xhr.responseText) {
+                    // Try to extract PHP error from HTML response
+                    var match = xhr.responseText.match(/Exception.*?:(.*?)(?:<|$)/);
+                    if (match) msg = match[1].trim();
+                }
+                showResult(msg, false);
             }
         });
     }
@@ -188,7 +204,18 @@ require(['jquery'], function ($) {
                 detectedPort = res.port;
                 detectedPassword = $('#te-redis-password').val();
                 if (res.recommended_dbs) recommendedDbs = res.recommended_dbs;
-                showResult(res.message, true);
+
+                var msg = res.message;
+                if (res.max_databases) {
+                    msg += ' (' + res.max_databases + ' databases available)';
+                }
+                // Warn if session DB not available
+                if (recommendedDbs.session < 0) {
+                    msg += ' — Sessions not available (not enough databases)';
+                    $('.te-redis-toggle[data-type="session"]').prop('disabled', true)
+                        .css('opacity', '0.5').attr('title', 'Not enough Redis databases');
+                }
+                showResult(msg, true);
                 if (res.status) updateUI(res.status);
             } else {
                 showResult(res.message || i18n.notFound, false);
