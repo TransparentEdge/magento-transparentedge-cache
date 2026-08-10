@@ -215,6 +215,13 @@ class Invalidator
             fastcgi_finish_request();
         }
 
+        // Reset import-mode latches. These are static so they survive between
+        // requests inside long-running processes (queue consumers, workers);
+        // without this reset the first import would suspend invalidations for
+        // the entire lifetime of the process.
+        self::$importModeDetected       = false;
+        self::$importShutdownRegistered = false;
+
         $results = [];
 
         if ($this->fullPurge) {
