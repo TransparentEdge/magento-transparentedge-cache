@@ -1,0 +1,222 @@
+diff --git a/Observer/AutoFlushCacheObserver.php b/Observer/AutoFlushCacheObserver.php
+index 13db4af..b9bb911 100644
+--- a/Observer/AutoFlushCacheObserver.php
++++ b/Observer/AutoFlushCacheObserver.php
+@@ -94,41 +94,41 @@ class AutoFlushCacheObserver implements ObserverInterface
+             return;
+         }
+ 
+-        $flushed = [];
++        try {
++            $flushed = [];
+ 
+-        // Set the flag so CacheInvalidatePlugin doesn't trigger redundant CDN purge
+-        CacheInvalidatePlugin::$autoFlushInProgress = true;
++            // Set the flag so CacheInvalidatePlugin doesn't trigger redundant CDN purge
++            CacheInvalidatePlugin::$autoFlushInProgress = true;
+ 
+-        try {
+-            $invalidTypes = $this->cacheTypeList->getInvalidated();
+-            foreach ($invalidTypes as $type) {
+-                $typeCode = $type->getId();
+-                if (in_array($typeCode, self::AUTO_FLUSH_TYPES, true)) {
+-                    $this->cacheTypeList->cleanType($typeCode);
+-                    $flushed[] = $typeCode;
++            try {
++                $invalidTypes = $this->cacheTypeList->getInvalidated();
++                foreach ($invalidTypes as $type) {
++                    $typeCode = $type->getId();
++                    if (in_array($typeCode, self::AUTO_FLUSH_TYPES, true)) {
++                        $this->cacheTypeList->cleanType($typeCode);
++                        $flushed[] = $typeCode;
++                    }
+                 }
++            } finally {
++                CacheInvalidatePlugin::$autoFlushInProgress = false;
+             }
+-        } finally {
+-            CacheInvalidatePlugin::$autoFlushInProgress = false;
+-        }
+ 
+-        if (empty($flushed)) {
+-            return;
+-        }
++            if (empty($flushed)) {
++                return;
++            }
+ 
+-        $this->logger->info('TransparentEdge: Auto-flushed Magento cache types', [
+-            'types' => $flushed,
+-        ]);
++            $this->logger->info('TransparentEdge: Auto-flushed Magento cache types', [
++                'types' => $flushed,
++            ]);
+ 
+-        // If full_page was flushed, check if CDN needs a full purge.
+-        // Entity saves (product, category, CMS) are handled surgically by
+-        // InvalidateTagsObserver — they queue specific tags in the Invalidator.
+-        // Structural changes (theme, config, design) don't queue tags.
+-        // So: if full_page was flushed but no surgical tags are pending,
+-        // this is a structural change and we need a full CDN purge.
+-        if (in_array('full_page', $flushed, true) && !$this->invalidator->hasPendingTags()) {
+-            $this->logger->info('TransparentEdge: Structural change detected (no surgical tags pending), queuing full CDN purge');
+-            $this->invalidator->queueFullPurge();
++            if (in_array('full_page', $flushed, true) && !$this->invalidator->hasPendingTags()) {
++                $this->logger->info('TransparentEdge: Structural change detected (no surgical tags pending), queuing full CDN purge');
++                $this->invalidator->queueFullPurge();
++            }
++        } catch (\Exception $e) {
++            $this->logger->error('TransparentEdge: AutoFlushCacheObserver error', [
++                'error' => $e->getMessage(),
++            ]);
+         }
+     }
+ }
+diff --git a/Observer/CacheFlushObserver.php b/Observer/CacheFlushObserver.php
+index 7a796b6..516337e 100644
+--- a/Observer/CacheFlushObserver.php
++++ b/Observer/CacheFlushObserver.php
+@@ -72,13 +72,19 @@ class CacheFlushObserver implements ObserverInterface
+             return;
+         }
+ 
+-        $event = $observer->getEvent()->getName();
++        try {
++            $event = $observer->getEvent()->getName();
+ 
+-        $this->logger->info('TransparentEdge: Cache flush event triggered', ['event' => $event]);
++            $this->logger->info('TransparentEdge: Cache flush event triggered', ['event' => $event]);
+ 
+-        $this->invalidator->queueFullPurge();
+-        $this->messageManager->addSuccessMessage(
+-            __('Transparent Edge CDN cache purge has been queued.')
+-        );
++            $this->invalidator->queueFullPurge();
++            $this->messageManager->addSuccessMessage(
++                __('Transparent Edge CDN cache purge has been queued.')
++            );
++        } catch (\Exception $e) {
++            $this->logger->error('TransparentEdge: CacheFlushObserver error', [
++                'error' => $e->getMessage(),
++            ]);
++        }
+     }
+ }
+diff --git a/Observer/InvalidateTagsObserver.php b/Observer/InvalidateTagsObserver.php
+index a377116..0e322ba 100644
+--- a/Observer/InvalidateTagsObserver.php
++++ b/Observer/InvalidateTagsObserver.php
+@@ -71,8 +71,9 @@ class InvalidateTagsObserver implements ObserverInterface
+             return;
+         }
+ 
+-        $event     = $observer->getEvent();
+-        $eventName = $event->getName();
++        try {
++            $event     = $observer->getEvent();
++            $eventName = $event->getName();
+ 
+         switch ($eventName) {
+             case 'clean_cache_by_tags':
+@@ -108,6 +109,11 @@ class InvalidateTagsObserver implements ObserverInterface
+                 $this->handleGenericSave($event);
+                 break;
+         }
++        } catch (\Exception $e) {
++            $this->logger->error('TransparentEdge: InvalidateTagsObserver error', [
++                'error' => $e->getMessage(),
++            ]);
++        }
+     }
+ 
+     /**
+diff --git a/Observer/MassActionObserver.php b/Observer/MassActionObserver.php
+index 6beae7b..1e0f9c3 100644
+--- a/Observer/MassActionObserver.php
++++ b/Observer/MassActionObserver.php
+@@ -78,23 +78,29 @@ class MassActionObserver implements ObserverInterface
+             return;
+         }
+ 
+-        $productIds = $this->attributeHelper->getProductIds();
++        try {
++            $productIds = $this->attributeHelper->getProductIds();
+ 
+-        if (empty($productIds)) {
+-            return;
+-        }
++            if (empty($productIds)) {
++                return;
++            }
+ 
+-        $tags = [];
+-        foreach ($productIds as $productId) {
+-            $tags[] = 'cat_p_' . $productId;
+-        }
+-        $tags[] = 'cat_p';
++            $tags = [];
++            foreach ($productIds as $productId) {
++                $tags[] = 'cat_p_' . $productId;
++            }
++            $tags[] = 'cat_p';
+ 
+-        $this->invalidator->queueTags($tags);
++            $this->invalidator->queueTags($tags);
+ 
+-        $this->logger->info('TransparentEdge: Mass action invalidation queued', [
+-            'product_count' => count($productIds),
+-            'product_ids'   => array_slice($productIds, 0, 20),
+-        ]);
++            $this->logger->info('TransparentEdge: Mass action invalidation queued', [
++                'product_count' => count($productIds),
++                'product_ids'   => array_slice($productIds, 0, 20),
++            ]);
++        } catch (\Exception $e) {
++            $this->logger->error('TransparentEdge: MassActionObserver error', [
++                'error' => $e->getMessage(),
++            ]);
++        }
+     }
+ }
+diff --git a/Plugin/CacheInvalidatePlugin.php b/Plugin/CacheInvalidatePlugin.php
+index dce36a7..b603e17 100644
+--- a/Plugin/CacheInvalidatePlugin.php
++++ b/Plugin/CacheInvalidatePlugin.php
+@@ -71,19 +71,26 @@ class CacheInvalidatePlugin
+      */
+     public function afterCleanType(TypeListInterface $subject, $result, $typeCode)
+     {
+-        if (!$this->config->isConfigured()) {
+-            return $result;
+-        }
++        try {
++            if (!$this->config->isConfigured()) {
++                return $result;
++            }
+ 
+-        // Skip if this was triggered by our own auto-flush
+-        if (self::$autoFlushInProgress) {
+-            return $result;
+-        }
++            // Skip if this was triggered by our own auto-flush
++            if (self::$autoFlushInProgress) {
++                return $result;
++            }
+ 
+-        // If full_page cache is cleaned manually, trigger full CDN purge
+-        if ($typeCode === 'full_page') {
+-            $this->logger->info('TransparentEdge: full_page cache type cleaned manually, queuing full purge');
+-            $this->invalidator->queueFullPurge();
++            // If full_page cache is cleaned manually, trigger full CDN purge
++            if ($typeCode === 'full_page') {
++                $this->logger->info('TransparentEdge: full_page cache type cleaned manually, queuing full purge');
++                $this->invalidator->queueFullPurge();
++            }
++        } catch (\Exception $e) {
++            // Never crash the site for a CDN invalidation failure
++            $this->logger->error('TransparentEdge: CacheInvalidatePlugin error', [
++                'error' => $e->getMessage(),
++            ]);
+         }
+ 
+         return $result;

@@ -71,8 +71,9 @@ class InvalidateTagsObserver implements ObserverInterface
             return;
         }
 
-        $event     = $observer->getEvent();
-        $eventName = $event->getName();
+        try {
+            $event     = $observer->getEvent();
+            $eventName = $event->getName();
 
         switch ($eventName) {
             case 'clean_cache_by_tags':
@@ -107,6 +108,11 @@ class InvalidateTagsObserver implements ObserverInterface
                 // Handle entity save events generically
                 $this->handleGenericSave($event);
                 break;
+        }
+        } catch (\Exception $e) {
+            $this->logger->error('TransparentEdge: InvalidateTagsObserver error', [
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 

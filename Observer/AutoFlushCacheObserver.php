@@ -94,41 +94,41 @@ class AutoFlushCacheObserver implements ObserverInterface
             return;
         }
 
-        $flushed = [];
-
-        // Set the flag so CacheInvalidatePlugin doesn't trigger redundant CDN purge
-        CacheInvalidatePlugin::$autoFlushInProgress = true;
-
         try {
-            $invalidTypes = $this->cacheTypeList->getInvalidated();
-            foreach ($invalidTypes as $type) {
-                $typeCode = $type->getId();
-                if (in_array($typeCode, self::AUTO_FLUSH_TYPES, true)) {
-                    $this->cacheTypeList->cleanType($typeCode);
-                    $flushed[] = $typeCode;
+            $flushed = [];
+
+            // Set the flag so CacheInvalidatePlugin doesn't trigger redundant CDN purge
+            CacheInvalidatePlugin::$autoFlushInProgress = true;
+
+            try {
+                $invalidTypes = $this->cacheTypeList->getInvalidated();
+                foreach ($invalidTypes as $type) {
+                    $typeCode = $type->getId();
+                    if (in_array($typeCode, self::AUTO_FLUSH_TYPES, true)) {
+                        $this->cacheTypeList->cleanType($typeCode);
+                        $flushed[] = $typeCode;
+                    }
                 }
+            } finally {
+                CacheInvalidatePlugin::$autoFlushInProgress = false;
             }
-        } finally {
-            CacheInvalidatePlugin::$autoFlushInProgress = false;
-        }
 
-        if (empty($flushed)) {
-            return;
-        }
+            if (empty($flushed)) {
+                return;
+            }
 
-        $this->logger->info('TransparentEdge: Auto-flushed Magento cache types', [
-            'types' => $flushed,
-        ]);
+            $this->logger->info('TransparentEdge: Auto-flushed Magento cache types', [
+                'types' => $flushed,
+            ]);
 
-        // If full_page was flushed, check if CDN needs a full purge.
-        // Entity saves (product, category, CMS) are handled surgically by
-        // InvalidateTagsObserver — they queue specific tags in the Invalidator.
-        // Structural changes (theme, config, design) don't queue tags.
-        // So: if full_page was flushed but no surgical tags are pending,
-        // this is a structural change and we need a full CDN purge.
-        if (in_array('full_page', $flushed, true) && !$this->invalidator->hasPendingTags()) {
-            $this->logger->info('TransparentEdge: Structural change detected (no surgical tags pending), queuing full CDN purge');
-            $this->invalidator->queueFullPurge();
+            if (in_array('full_page', $flushed, true) && !$this->invalidator->hasPendingTags()) {
+                $this->logger->info('TransparentEdge: Structural change detected (no surgical tags pending), queuing full CDN purge');
+                $this->invalidator->queueFullPurge();
+            }
+        } catch (\Exception $e) {
+            $this->logger->error('TransparentEdge: AutoFlushCacheObserver error', [
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 }

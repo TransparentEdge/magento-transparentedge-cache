@@ -71,19 +71,26 @@ class CacheInvalidatePlugin
      */
     public function afterCleanType(TypeListInterface $subject, $result, $typeCode)
     {
-        if (!$this->config->isConfigured()) {
-            return $result;
-        }
+        try {
+            if (!$this->config->isConfigured()) {
+                return $result;
+            }
 
-        // Skip if this was triggered by our own auto-flush
-        if (self::$autoFlushInProgress) {
-            return $result;
-        }
+            // Skip if this was triggered by our own auto-flush
+            if (self::$autoFlushInProgress) {
+                return $result;
+            }
 
-        // If full_page cache is cleaned manually, trigger full CDN purge
-        if ($typeCode === 'full_page') {
-            $this->logger->info('TransparentEdge: full_page cache type cleaned manually, queuing full purge');
-            $this->invalidator->queueFullPurge();
+            // If full_page cache is cleaned manually, trigger full CDN purge
+            if ($typeCode === 'full_page') {
+                $this->logger->info('TransparentEdge: full_page cache type cleaned manually, queuing full purge');
+                $this->invalidator->queueFullPurge();
+            }
+        } catch (\Exception $e) {
+            // Never crash the site for a CDN invalidation failure
+            $this->logger->error('TransparentEdge: CacheInvalidatePlugin error', [
+                'error' => $e->getMessage(),
+            ]);
         }
 
         return $result;

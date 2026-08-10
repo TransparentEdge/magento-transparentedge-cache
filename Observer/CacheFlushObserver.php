@@ -72,13 +72,19 @@ class CacheFlushObserver implements ObserverInterface
             return;
         }
 
-        $event = $observer->getEvent()->getName();
+        try {
+            $event = $observer->getEvent()->getName();
 
-        $this->logger->info('TransparentEdge: Cache flush event triggered', ['event' => $event]);
+            $this->logger->info('TransparentEdge: Cache flush event triggered', ['event' => $event]);
 
-        $this->invalidator->queueFullPurge();
-        $this->messageManager->addSuccessMessage(
-            __('Transparent Edge CDN cache purge has been queued.')
-        );
+            $this->invalidator->queueFullPurge();
+            $this->messageManager->addSuccessMessage(
+                __('Transparent Edge CDN cache purge has been queued.')
+            );
+        } catch (\Exception $e) {
+            $this->logger->error('TransparentEdge: CacheFlushObserver error', [
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

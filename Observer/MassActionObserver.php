@@ -78,23 +78,29 @@ class MassActionObserver implements ObserverInterface
             return;
         }
 
-        $productIds = $this->attributeHelper->getProductIds();
+        try {
+            $productIds = $this->attributeHelper->getProductIds();
 
-        if (empty($productIds)) {
-            return;
+            if (empty($productIds)) {
+                return;
+            }
+
+            $tags = [];
+            foreach ($productIds as $productId) {
+                $tags[] = 'cat_p_' . $productId;
+            }
+            $tags[] = 'cat_p';
+
+            $this->invalidator->queueTags($tags);
+
+            $this->logger->info('TransparentEdge: Mass action invalidation queued', [
+                'product_count' => count($productIds),
+                'product_ids'   => array_slice($productIds, 0, 20),
+            ]);
+        } catch (\Exception $e) {
+            $this->logger->error('TransparentEdge: MassActionObserver error', [
+                'error' => $e->getMessage(),
+            ]);
         }
-
-        $tags = [];
-        foreach ($productIds as $productId) {
-            $tags[] = 'cat_p_' . $productId;
-        }
-        $tags[] = 'cat_p';
-
-        $this->invalidator->queueTags($tags);
-
-        $this->logger->info('TransparentEdge: Mass action invalidation queued', [
-            'product_count' => count($productIds),
-            'product_ids'   => array_slice($productIds, 0, 20),
-        ]);
     }
 }
