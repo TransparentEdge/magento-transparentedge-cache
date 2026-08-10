@@ -1,0 +1,81 @@
+diff --git a/Plugin/ResponseHeadersPlugin.php b/Plugin/ResponseHeadersPlugin.php
+index 0bc328c..f18352e 100644
+--- a/Plugin/ResponseHeadersPlugin.php
++++ b/Plugin/ResponseHeadersPlugin.php
+@@ -6,6 +6,11 @@
+  * 1. Add Surrogate-Key and Cache-Control headers (for CDN)
+  * 2. Optimize HTML (WPO: preload, lazy load, DNS prefetch)
+  *
++ * IMPORTANT: This plugin fires on EVERY sendResponse(), including
++ * pub/get.php (static files) and pub/errors/404.php where the Magento
++ * application is not fully bootstrapped (no area code, no session).
++ * We must guard against this to prevent SessionException crashes.
++ *
+  * @package   TransparentEdge_CDN
+  * @author    Transparent Edge Services
+  * @copyright Copyright (c) 2025 Transparent Edge Services
+@@ -18,29 +23,22 @@ namespace TransparentEdge\CDN\Plugin;
+ use TransparentEdge\CDN\Model\HeaderManager;
+ use TransparentEdge\CDN\Model\HtmlOptimizer;
+ use Magento\Framework\App\Response\Http as HttpResponse;
++use Magento\Framework\App\State as AppState;
+ 
+ class ResponseHeadersPlugin
+ {
+-    /**
+-     * @var HeaderManager
+-     */
+     private HeaderManager $headerManager;
+-
+-    /**
+-     * @var HtmlOptimizer
+-     */
+     private HtmlOptimizer $htmlOptimizer;
++    private AppState $appState;
+ 
+-    /**
+-     * @param HeaderManager $headerManager
+-     * @param HtmlOptimizer $htmlOptimizer
+-     */
+     public function __construct(
+         HeaderManager $headerManager,
+-        HtmlOptimizer $htmlOptimizer
++        HtmlOptimizer $htmlOptimizer,
++        AppState $appState
+     ) {
+         $this->headerManager = $headerManager;
+         $this->htmlOptimizer = $htmlOptimizer;
++        $this->appState      = $appState;
+     }
+ 
+     /**
+@@ -48,11 +46,29 @@ class ResponseHeadersPlugin
+      * 1. Inject TE cache headers
+      * 2. Optimize HTML (WPO)
+      *
++     * Guards:
++     * - Skip if area code not set (pub/get.php, pub/errors/404.php)
++     * - Skip if not in frontend or adminhtml area
++     *
+      * @param  HttpResponse $subject
+      * @return void
+      */
+     public function beforeSendResponse(HttpResponse $subject): void
+     {
++        // Guard: skip in contexts where Magento is not fully bootstrapped
++        // (static file serving, error pages, CLI). Without an area code,
++        // any config/store/session access throws SessionException.
++        try {
++            $areaCode = $this->appState->getAreaCode();
++        } catch (\Magento\Framework\Exception\LocalizedException $e) {
++            return;
++        }
++
++        // Only act in frontend and adminhtml areas
++        if (!in_array($areaCode, ['frontend', 'adminhtml'], true)) {
++            return;
++        }
++
+         // 1. Cache headers (Surrogate-Key, Cache-Control)
+         $this->headerManager->applyHeaders($subject);
+ 
