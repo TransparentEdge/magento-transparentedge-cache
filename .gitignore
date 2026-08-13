@@ -17,3 +17,9 @@ pub/static/
 # Backups
 *.te-backup
 *.bak
+
+# Never commit patch/backup artefacts
+*.patch
+*.orig
+*.rej
+*.bak

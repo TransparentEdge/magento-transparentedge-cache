@@ -11,12 +11,26 @@
 -->
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="urn:magento:framework:Module/etc/module.xsd">
-    <module name="TransparentEdge_CDN" setup_version="2.0.0">
+    <!--
+        No setup_version declared on purpose.
+
+        This module creates no tables and ships no Setup/ scripts or
+        db_schema.xml, so it has nothing to version. Declaring setup_version
+        makes Magento record it in the setup_module table and compare code vs
+        DB on every request; if the two diverge (a rollback, or redeploying an
+        older tag) Magento hard-fails the whole storefront with "Please update
+        your modules". Omitting it removes that failure mode — Magento 2.3+
+        skips the check for modules without a declared version.
+    -->
+    <module name="TransparentEdge_CDN">
         <sequence>
+            <module name="Magento_Backend"/>
+            <module name="Magento_Config"/>
             <module name="Magento_PageCache"/>
             <module name="Magento_Store"/>
             <module name="Magento_Catalog"/>
             <module name="Magento_Cms"/>
+            <module name="Magento_Sitemap"/>
         </sequence>
     </module>
 </config>

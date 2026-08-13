@@ -24,13 +24,48 @@ Plugin oficial de integración CDN de [Transparent Edge Services](https://www.tr
 
 ## Instalación
 
+> Este paquete **no está publicado en Packagist**. Para instalarlo con Composer hay
+> que registrar antes este repositorio en el proyecto; sin ese paso
+> `composer require` no lo encuentra.
+
+### Opción A — Composer (recomendada, y la única viable con CI/CD)
+
 ```bash
-# 1. Copiar los archivos del plugin
+# 1. Registrar el repositorio en el composer.json del proyecto
+composer config repositories.transparentedge vcs \
+  https://github.com/TransparentEdge/magento-transparentedge-cache
+
+# 2. Instalar
+composer require transparentedge/magento2-cdn:^2.0
+
+# 3. Activar
+bin/magento module:enable TransparentEdge_CDN
+bin/magento setup:upgrade
+bin/magento setup:di:compile
+bin/magento cache:flush
+```
+
+Para actualizar:
+
+```bash
+composer update transparentedge/magento2-cdn
+bin/magento setup:di:compile && bin/magento cache:flush
+```
+
+Si Composer resuelve una versión antigua, vacía su caché con
+`composer clear-cache` y comprueba lo instalado con
+`composer show transparentedge/magento2-cdn`.
+
+### Opción B — Copia manual
+
+Los comandos asumen un servidor web que corre como `www-data`; adáptalos si tu
+entorno usa otro usuario o gestiona los permisos por pipeline.
+
+```bash
 mkdir -p app/code/TransparentEdge/CDN
 cp -r magento-transparentedge-cache/* app/code/TransparentEdge/CDN/
 chown -R www-data:www-data app/code/TransparentEdge/
 
-# 2. Activar el módulo
 bin/magento module:enable TransparentEdge_CDN
 bin/magento setup:upgrade
 bin/magento setup:di:compile
@@ -71,7 +106,9 @@ El plugin intercepta los eventos de Magento y envía invalidaciones quirúrgicas
 
 ## Documentación
 
-La guía completa de instalación, configuración y uso está disponible en [`doc/TransparentEdge-CDN-Magento2-Guia-v1.0.0.pdf`](doc/TransparentEdge-CDN-Magento2-Guia-v1.0.0.pdf).
+La guía completa está en la carpeta [`doc/`](https://github.com/TransparentEdge/magento-transparentedge-cache/tree/main/doc) de este repositorio.
+
+> `doc/` está marcada como `export-ignore`, por lo que **no viaja en el paquete que descarga Composer**. Consúltala en GitHub.
 
 ## Soporte
 
