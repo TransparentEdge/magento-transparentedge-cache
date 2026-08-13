@@ -44,7 +44,7 @@ class StatusCommand extends Command
     {
         $output->writeln('');
         $output->writeln('<info>═══════════════════════════════════════════════════════</info>');
-        $output->writeln('<info>  Transparent Edge CDN — Magento 2 Plugin v2.0.0</info>');
+        $output->writeln('<info>  Transparent Edge CDN — Magento 2 Plugin v' . Config::VERSION . '</info>');
         $output->writeln('<info>═══════════════════════════════════════════════════════</info>');
         $output->writeln('');
 

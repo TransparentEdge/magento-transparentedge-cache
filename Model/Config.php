@@ -18,6 +18,16 @@ use Magento\Store\Model\StoreManagerInterface;
 class Config
 {
     /**
+     * Plugin version — single source of truth for display purposes.
+     *
+     * Note: composer.json intentionally has NO "version" field. When installed
+     * from a VCS repository, Composer derives the version from the git tag; an
+     * explicit version field would override the tag and pin every release to
+     * the same number. Bump this constant and the git tag together.
+     */
+    public const VERSION = '2.0.4';
+
+    /**
      * Config path prefixes
      */
     private const PREFIX = 'transparentedge';

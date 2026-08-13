@@ -23,7 +23,6 @@
         "guzzlehttp/guzzle": "^7.5"
     },
     "type": "magento2-module",
-    "version": "2.0.0",
     "license": "MIT",
     "homepage": "https://github.com/TransparentEdge/magento-transparentedge-cache",
     "support": {

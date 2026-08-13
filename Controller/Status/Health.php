@@ -42,7 +42,7 @@ class Health implements HttpGetActionInterface
         $redisStatus = $this->redisManager->getStatus();
         $health = [
             'status'            => $this->config->isConfigured() ? 'ok' : 'unconfigured',
-            'version'           => '2.0.0',
+            'version'           => Config::VERSION,
             'cdn_enabled'       => $this->config->isEnabled(),
             'company_id'        => $this->config->getCompanyId(),
             'speculation_rules' => $this->config->isSpeculationEnabled() ? $this->config->getSpeculationMode() : 'disabled',
