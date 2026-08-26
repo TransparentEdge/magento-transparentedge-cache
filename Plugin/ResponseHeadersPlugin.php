@@ -58,9 +58,13 @@ class ResponseHeadersPlugin
         // Guard: skip in contexts where Magento is not fully bootstrapped
         // (static file serving, error pages, CLI). Without an area code,
         // any config/store/session access throws SessionException.
+        //
+        // The dependencies below are injected as Proxies (see etc/di.xml), so
+        // returning here means the real objects are never built — which is what
+        // keeps pub/get.php and pub/errors/404.php safe.
         try {
             $areaCode = $this->appState->getAreaCode();
-        } catch (\Magento\Framework\Exception\LocalizedException $e) {
+        } catch (\Throwable $e) {
             return;
         }
 
@@ -69,10 +73,16 @@ class ResponseHeadersPlugin
             return;
         }
 
-        // 1. Cache headers (Surrogate-Key, Cache-Control)
-        $this->headerManager->applyHeaders($subject);
+        try {
+            // 1. Cache headers (Surrogate-Key, Cache-Control)
+            $this->headerManager->applyHeaders($subject);
 
-        // 2. HTML optimization (preload, lazy load, DNS prefetch)
-        $this->htmlOptimizer->optimize($subject);
+            // 2. HTML optimization (preload, lazy load, DNS prefetch)
+            $this->htmlOptimizer->optimize($subject);
+        } catch (\Throwable $e) {
+            // The CDN is an accelerator, not a critical component. Never let a
+            // failure here break the response the customer is waiting for.
+            return;
+        }
     }
 }

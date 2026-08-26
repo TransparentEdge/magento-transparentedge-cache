@@ -177,6 +177,31 @@
                 sortOrder="100"/>
     </type>
 
+    <!--
+        The response plugin is instantiated on EVERY sendResponse(), including
+        pub/get.php and pub/errors/404.php where Magento is not bootstrapped
+        (no area code, no session). Constructing its dependencies eagerly builds
+        a graph that can reach third-party code which starts a session in its
+        constructor, throwing "Area code not set" before our own guard in
+        beforeSendResponse() ever runs.
+
+        Proxies keep construction cheap: the real objects are only built if the
+        area-code guard passes and we actually decide to do work.
+    -->
+    <type name="TransparentEdge\CDN\Plugin\ResponseHeadersPlugin">
+        <arguments>
+            <argument name="headerManager" xsi:type="object">TransparentEdge\CDN\Model\HeaderManager\Proxy</argument>
+            <argument name="htmlOptimizer" xsi:type="object">TransparentEdge\CDN\Model\HtmlOptimizer\Proxy</argument>
+        </arguments>
+    </type>
+
+    <!-- Same reasoning: Invalidator pulls in the API client, Guzzle and warm-up -->
+    <type name="TransparentEdge\CDN\Plugin\CacheInvalidatePlugin">
+        <arguments>
+            <argument name="invalidator" xsi:type="object">TransparentEdge\CDN\Model\Invalidator\Proxy</argument>
+        </arguments>
+    </type>
+
     <!-- Intercept cache type cleaning to trigger CDN purge -->
     <type name="Magento\Framework\App\Cache\TypeList">
         <plugin name="transparentedge_cache_invalidate"
@@ -203,6 +228,15 @@
         </arguments>
     </virtualType>
 
+    <!--
+        Dedicated logger. Both 'handlers' and 'processors' are declared
+        explicitly: a virtualType inherits the arguments configured on its
+        parent type, so without an explicit (empty) processors list this logger
+        would also instantiate any handler or processor that a third-party
+        module has added to Magento\Framework\Logger\Monolog globally. One such
+        processor starting a session in its constructor is enough to break
+        every request that touches this logger outside a bootstrapped area.
+    -->
     <virtualType name="TransparentEdge\CDN\Model\Logger"
                  type="Magento\Framework\Logger\Monolog">
         <arguments>
@@ -210,6 +244,7 @@
             <argument name="handlers" xsi:type="array">
                 <item name="system" xsi:type="object">TransparentEdge\CDN\Model\Logger\Handler</item>
             </argument>
+            <argument name="processors" xsi:type="array"/>
         </arguments>
     </virtualType>
 
