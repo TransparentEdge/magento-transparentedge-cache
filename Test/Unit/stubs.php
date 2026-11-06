@@ -2,6 +2,15 @@
 /**
  * Dobles minimos de las clases de Magento necesarias para ejercitar
  * HeaderManager de verdad (no una copia de su logica).
+ *
+ * IMPORTANTE: este fichero declara clases en el espacio de nombres de
+ * Magento, asi que NO puede vivir en cualquier sitio del modulo.
+ * setup:di:compile incluye todos los .php bajo app/code/<Vendor>/<Module>
+ * y solo excluye las rutas <Modulo>/Test y <Modulo>/tests, ancladas en la
+ * raiz del modulo. Fuera de ahi, la compilacion muere con
+ * "Cannot declare class ..., because the name is already in use".
+ * Por eso el banco vive en Test/Unit, y Test/Unit/packaging.php vigila
+ * que no vuelva a salirse de ahi.
  */
 declare(strict_types=1);
 

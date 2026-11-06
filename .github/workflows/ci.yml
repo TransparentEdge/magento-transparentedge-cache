@@ -28,16 +28,16 @@ jobs:
         # En un tag, comprueba ademas que Config::VERSION coincide con el.
         run: |
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            php dev/tests/packaging.php "${GITHUB_REF_NAME}"
+            php Test/Unit/packaging.php "${GITHUB_REF_NAME}"
           else
-            php dev/tests/packaging.php
+            php Test/Unit/packaging.php
           fi
 
       - name: Cabeceras y resolucion de tags
-        run: php dev/tests/header-and-tags.php
+        run: php Test/Unit/header-and-tags.php
 
       - name: Estructura del VCL generado
-        run: php dev/tests/vcl-structure.php
+        run: php Test/Unit/vcl-structure.php
 
       - name: composer validate
         run: composer validate --no-check-publish --no-check-lock

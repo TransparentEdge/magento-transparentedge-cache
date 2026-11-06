@@ -1,6 +1,6 @@
 # Exclude from Composer dist packages
 /doc                 export-ignore
-/dev                 export-ignore
+/Test                export-ignore
 /.github             export-ignore
 /.gitignore          export-ignore
 /.gitattributes      export-ignore

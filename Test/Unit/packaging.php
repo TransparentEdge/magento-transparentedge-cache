@@ -80,6 +80,28 @@ if ($moduleXml !== false) {
 check('etc/module.xml NO declara el atributo setup_version', !$hasSetupVersion,
     'setup_version hace que Magento compare codigo contra BD y tumbe la tienda tras un rollback');
 
+// setup:di:compile incluye TODOS los .php bajo app/code/<Vendor>/<Module>,
+// y solo excluye dos rutas, ancladas en la raiz del modulo:
+//     #^<base>/<Vendor>/<Module>/Test#
+//     #^<base>/<Vendor>/<Module>/tests#
+// (setup/src/Magento/Setup/Console/Command/DiCompileCommand.php)
+//
+// Un fichero fuera de ahi que declare un espacio de nombres ajeno tumba la
+// compilacion con "Cannot declare class X, because the name is already in
+// use". Nos paso con los dobles de prueba en dev/tests: por eso viven en
+// Test/Unit y por eso existe esta comprobacion.
+$intrusos = [];
+foreach ($php as $p) {
+    $rel = ltrim(str_replace($root, '', $p), '/');
+    if (strpos($rel, 'Test/') === 0 || strpos($rel, 'tests/') === 0) { continue; }
+    $src = (string) file_get_contents($p);
+    if (preg_match_all('/^\s*namespace\s+((?!TransparentEdge\\\\)[A-Za-z_][A-Za-z0-9_\\\\]*)/m', $src, $m)) {
+        foreach ($m[1] as $ns) { $intrusos[] = $rel . ' declara ' . $ns; }
+    }
+}
+check('ningun .php fuera de Test/ declara un espacio de nombres ajeno',
+    $intrusos === [], implode('; ', $intrusos));
+
 echo "\n=== dependencias declaradas ===\n";
 $map = static function (string $ns): ?string {
     if (!preg_match('/^Magento\\\\([A-Za-z0-9]+)/', $ns, $m)) { return null; }
