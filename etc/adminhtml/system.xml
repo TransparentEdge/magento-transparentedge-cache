@@ -459,7 +459,7 @@
                 <field id="health_token" translate="label comment" type="text" sortOrder="27"
                        showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Health Check Token</label>
-                    <comment>Optional token to protect /transparentedge/status/health. If set, full status requires ?token=VALUE. Leave empty for unrestricted access.</comment>
+                    <comment>Token protecting the detailed status at /transparentedge/status/health. Without a token the endpoint reports liveness only; set one and call it with ?token=VALUE to get company ID, module version and cache backends. Use a long random value.</comment>
                     <config_path>transparentedge/advanced/health_token</config_path>
                 </field>
 

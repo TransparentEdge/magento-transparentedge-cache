@@ -25,7 +25,7 @@ class Config
      * explicit version field would override the tag and pin every release to
      * the same number. Bump this constant and the git tag together.
      */
-    public const VERSION = '2.0.6';
+    public const VERSION = '2.0.7';
 
     /**
      * Config path prefixes

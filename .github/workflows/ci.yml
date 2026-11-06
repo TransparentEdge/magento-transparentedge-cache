@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1', '8.2', '8.3']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: simplexml, json
+          coverage: none
+
+      - name: Empaquetado y distribucion
+        # En un tag, comprueba ademas que Config::VERSION coincide con el.
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            php dev/tests/packaging.php "${GITHUB_REF_NAME}"
+          else
+            php dev/tests/packaging.php
+          fi
+
+      - name: Cabeceras y resolucion de tags
+        run: php dev/tests/header-and-tags.php
+
+      - name: Estructura del VCL generado
+        run: php dev/tests/vcl-structure.php
+
+      - name: composer validate
+        run: composer validate --no-check-publish --no-check-lock
