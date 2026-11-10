@@ -80,6 +80,23 @@ namespace {
     $check('el 404 se evalua antes que el bloque generico de errores',
         $p404 !== false && $perr !== false && $p404 < $perr);
 
+    echo "\n=== el edge no pisa el TTL que manda el origen ===\n";
+    // Los perfiles por tipo de pagina viven en el origen: la portada sale con
+    // s-maxage=300 y el resto con el global. Si el VCL fijase Cache-Control o
+    // beresp.ttl sin condicion, ese perfil no llegaria nunca al edge y la
+    // mitigacion del fallo de block_html seria inutil.
+    $i = strpos($vcl, '# HTML pages');
+    $bloqueHtml = $i !== false ? substr($vcl, $i, 900) : '';
+    $guarda = strpos($bloqueHtml, 'if (beresp.http.Cache-Control !~ "s-maxage")');
+    $setCc  = strpos($bloqueHtml, 'set beresp.http.Cache-Control');
+    $setTtl = strpos($bloqueHtml, 'set beresp.ttl');
+    $check('el bloque HTML tiene la guarda de s-maxage', $guarda !== false);
+    $check('el Cache-Control solo se fija dentro de la guarda',
+        $guarda !== false && $setCc !== false && $setCc > $guarda);
+    $check('el beresp.ttl solo se fija dentro de la guarda',
+        $guarda !== false && $setTtl !== false && $setTtl > $guarda,
+        'un beresp.ttl incondicional anularia el s-maxage del origen');
+
     echo "\n=== bypass basico ===\n";
     foreach ([
         'metodos no GET/HEAD'   => 'req.method !~ "^(GET|HEAD)$"',

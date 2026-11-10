@@ -11,8 +11,10 @@ $repo = __DIR__ . '/../..';
 
 require __DIR__ . '/stubs.php';
 require $repo . '/Model/TagResolver.php';     // clase real, sin dependencias
+require $repo . '/Model/CacheProfile.php';    // clase real
 require $repo . '/Model/HeaderManager.php';   // clase real
 
+use TransparentEdge\CDN\Model\CacheProfile;
 use TransparentEdge\CDN\Model\Config;
 use TransparentEdge\CDN\Model\HeaderManager;
 use TransparentEdge\CDN\Model\TagResolver;
@@ -27,11 +29,28 @@ function check(string $name, bool $ok, string $detail = ''): void {
     else { $fail++; printf("  FALLO %s%s\n", $name, $detail !== '' ? "  -> $detail" : ''); }
 }
 
-function build(string $uri = '/', string $method = 'GET'): array {
+/**
+ * Doble de ScopeConfigInterface para el perfil de cache. Sin valores, el
+ * perfil queda desactivado y HeaderManager usa el perfil global de siempre,
+ * que es lo que comprueban las pruebas de abajo.
+ */
+final class HeaderScope implements \Magento\Framework\App\Config\ScopeConfigInterface
+{
+    public function __construct(private array $v = []) {}
+    public function getValue($p, $s = 'default', $c = null) { return $this->v[$p] ?? null; }
+    public function isSetFlag($p, $s = 'default', $c = null) { return (bool) $this->getValue($p); }
+}
+
+function build(string $uri = '/', string $method = 'GET', string $accion = ''): array {
     $config   = new Config();
     $resolver = new TagResolver();
     $logger   = new FakeLogger();
-    $manager  = new HeaderManager($config, $resolver, new FakeRequest($method, $uri), $logger);
+    $profile  = new CacheProfile(
+        new HeaderScope(),
+        new \Magento\Framework\App\Request\Http($accion),
+        $config
+    );
+    $manager  = new HeaderManager($config, $resolver, new FakeRequest($method, $uri), $logger, $profile);
     return [$manager, $config, $logger];
 }
 
@@ -138,7 +157,13 @@ $roto     = new class extends TagResolver {
         throw new \RuntimeException('fallo simulado del resolutor');
     }
 };
-$m = new HeaderManager($config, $roto, new FakeRequest('GET', '/x'), $logger);
+$m = new HeaderManager(
+    $config,
+    $roto,
+    new FakeRequest('GET', '/x'),
+    $logger,
+    new CacheProfile(new HeaderScope(), new \Magento\Framework\App\Request\Http(''), $config)
+);
 $res = new Response();
 $res->setHttpResponseCode(200);
 $res->setHeader('Content-Type', 'text/html');
@@ -150,6 +175,44 @@ check('registra un warning', count($logger->lines) === 1 && $logger->lines[0][0]
 check('el mensaje nombra la excepcion',
     ($logger->lines[0][2]['error'] ?? '') === 'fallo simulado del resolutor',
     json_encode($logger->lines[0][2] ?? []));
+
+echo "\n=== el perfil por tipo de pagina llega a la respuesta real ===\n";
+$config  = new Config();
+$profile = new CacheProfile(
+    new HeaderScope(['transparentedge/cache_profiles/enabled' => 1]),
+    new \Magento\Framework\App\Request\Http('cms_index_index'),
+    $config
+);
+$m = new HeaderManager($config, new TagResolver(), new FakeRequest('GET', '/'), new FakeLogger(), $profile);
+$res = new Response();
+$res->setHttpResponseCode(200);
+$res->setHeader('Content-Type', 'text/html');
+$res->setHeader('X-Magento-Cache-Control', 'max-age=86400, public');
+$res->setHeader('X-Magento-Tags', 'cat_p,cms_p_2');
+$m->applyHeaders($res);
+$cc = $res->getHeader('Cache-Control')->getFieldValue();
+printf("  portada: %s\n", $cc);
+check('la portada recibe s-maxage=300', str_contains($cc, 's-maxage=300'), $cc);
+check('conserva el stale-while-revalidate largo', str_contains($cc, 'stale-while-revalidate=86400'), $cc);
+check('sigue emitiendo sus Surrogate-Keys',
+    $res->getHeader('Surrogate-Keys')->getFieldValue() === 'page-2 te-all te-products',
+    $res->getHeader('Surrogate-Keys')->getFieldValue());
+
+// Una categoria, con el mismo perfil activo, no debe cambiar.
+$profile = new CacheProfile(
+    new HeaderScope(['transparentedge/cache_profiles/enabled' => 1]),
+    new \Magento\Framework\App\Request\Http('catalog_category_view'),
+    $config
+);
+$m = new HeaderManager($config, new TagResolver(), new FakeRequest('GET', '/c.html'), new FakeLogger(), $profile);
+$res = new Response();
+$res->setHttpResponseCode(200);
+$res->setHeader('Content-Type', 'text/html');
+$res->setHeader('X-Magento-Cache-Control', 'max-age=86400, public');
+$m->applyHeaders($res);
+$cc = $res->getHeader('Cache-Control')->getFieldValue();
+printf("  categoria: %s\n", $cc);
+check('la categoria mantiene el TTL global', str_contains($cc, 's-maxage=172800'), $cc);
 
 echo "\n";
 printf("RESULTADO: %d correctas, %d fallos\n", $pass, $fail);

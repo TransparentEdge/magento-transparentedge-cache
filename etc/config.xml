@@ -30,6 +30,24 @@
                 <soft_purge>1</soft_purge>
                 <refetch>0</refetch>
             </cache>
+            <!--
+                Per-page-type cache profiles. Empty values inherit the HTML
+                settings above, so out of the box only the homepage differs:
+                a 5 minute fresh window with a 24h stale-while-revalidate, so
+                it refreshes itself without depending on a product tag that
+                Magento's block_html cache usually strips from the page.
+            -->
+            <cache_profiles>
+                <enabled>1</enabled>
+                <home_ttl>300</home_ttl>              <!-- 5m -->
+                <home_swr>86400</home_swr>            <!-- 1d -->
+                <category_ttl/>
+                <category_swr/>
+                <product_ttl/>
+                <product_swr/>
+                <cms_ttl/>
+                <cms_swr/>
+            </cache_profiles>
             <warmup>
                 <enabled>1</enabled>
                 <homepage>1</homepage>

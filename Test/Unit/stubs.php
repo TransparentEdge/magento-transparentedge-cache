@@ -74,6 +74,25 @@ namespace Magento\Framework\App {
     }
 }
 
+namespace Magento\Framework\App\Request {
+    /**
+     * Doble de la peticion. Solo necesitamos getFullActionName(), que en
+     * Magento 2.4.7 devuelve ruta_controlador_accion.
+     */
+    class Http
+    {
+        public function __construct(private string $fullActionName = '') {}
+        public function getFullActionName($delimiter = '_') { return $this->fullActionName; }
+    }
+}
+
+namespace Magento\Store\Model {
+    interface ScopeInterface
+    {
+        public const SCOPE_STORE = 'store';
+    }
+}
+
 namespace Magento\Framework\App\Config {
     interface ScopeConfigInterface
     {
@@ -158,13 +177,39 @@ namespace TransparentEdge\CDN\Model {
         public function getSpeculationInjection(): string { return $this->speculationInjection; }
         public function getSpeculationRulesUrl(): string { return 'https://tienda.test/transparentedge/speculationRules/index'; }
         public function getExcludeUrls(): array { return $this->excludeUrls; }
+        // Valores por defecto reales de etc/config.xml.
+        public int $htmlTtl = 172800;
+        public int $htmlBrowserTtl = 3600;
+        public int $staticTtl = 2592000;
+        public int $staticBrowserTtl = 86400;
+        public int $swr = 86400;
+        public int $sie = 86400;
+
+        public function getHtmlTtl(): int { return $this->htmlTtl; }
+        public function getHtmlBrowserTtl(): int { return $this->htmlBrowserTtl; }
+        public function getStaticTtl(): int { return $this->staticTtl; }
+        public function getStaticBrowserTtl(): int { return $this->staticBrowserTtl; }
+        public function getStaleWhileRevalidate(): int { return $this->swr; }
+        public function getStaleIfError(): int { return $this->sie; }
+
+        // Mismo orden de directivas que Model/Config::buildHtmlCacheControl().
         public function buildHtmlCacheControl(): string
         {
-            return 'max-age=3600, s-maxage=172800, stale-while-revalidate=86400, stale-if-error=86400';
+            return implode(', ', [
+                'public',
+                sprintf('s-maxage=%d', $this->getHtmlTtl()),
+                sprintf('max-age=%d', $this->getHtmlBrowserTtl()),
+                sprintf('stale-while-revalidate=%d', $this->getStaleWhileRevalidate()),
+                sprintf('stale-if-error=%d', $this->getStaleIfError()),
+            ]);
         }
         public function buildStaticCacheControl(): string
         {
-            return 'max-age=86400, s-maxage=2592000';
+            return implode(', ', [
+                'public',
+                sprintf('s-maxage=%d', $this->getStaticTtl()),
+                sprintf('max-age=%d', $this->getStaticBrowserTtl()),
+            ]);
         }
     }
 }

@@ -163,6 +163,98 @@
             </group>
 
             <!-- ═══════════════════════════════════════════ -->
+            <!-- Per-page-type cache profiles               -->
+            <!-- ═══════════════════════════════════════════ -->
+            <group id="cache_profiles" translate="label comment" type="text" sortOrder="25"
+                   showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Cache Profiles by Page Type</label>
+                <comment><![CDATA[Different page types age at different speeds. Leave a field empty to inherit the value from Cache Settings.<br/><br/><strong>The homepage is the one that matters.</strong> When a block is served from Magento's <code>block_html</code> cache its product collection is never loaded, so the page is tagged with the generic product tag instead of one tag per product. The edge rarely caches the first render after a flush, so the stored homepage usually lacks the individual product keys and a product change does not purge it. A short fresh window with a long stale-while-revalidate makes it refresh on time anyway: visitors are still served instantly from the stale copy while one request revalidates behind it.]]></comment>
+                <depends>
+                    <field id="transparentedge/general/enabled">1</field>
+                </depends>
+
+                <field id="enabled" translate="label comment" type="select" sortOrder="10"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Cache Profiles</label>
+                    <comment>When disabled, every HTML page uses the single TTL from Cache Settings.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/cache_profiles/enabled</config_path>
+                </field>
+
+                <field id="home_ttl" translate="label comment" type="text" sortOrder="20"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Homepage CDN TTL (s-maxage)</label>
+                    <comment>Seconds the homepage stays fresh at the edge. Default: 300 (5 minutes). Keep it short and rely on the stale window below.</comment>
+                    <config_path>transparentedge/cache_profiles/home_ttl</config_path>
+                    <validate>validate-digits</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+
+                <field id="home_swr" translate="label comment" type="text" sortOrder="30"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Homepage stale-while-revalidate</label>
+                    <comment>Seconds the edge may keep serving the stale homepage while it revalidates in the background. Default: 86400 (24 hours). Nobody waits for the revalidation.</comment>
+                    <config_path>transparentedge/cache_profiles/home_swr</config_path>
+                    <validate>validate-digits</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+
+                <field id="category_ttl" translate="label comment" type="text" sortOrder="40"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Category CDN TTL (s-maxage)</label>
+                    <comment>Empty inherits the HTML CDN TTL. Category pages are tagged reliably, so a long TTL plus invalidation is usually better.</comment>
+                    <config_path>transparentedge/cache_profiles/category_ttl</config_path>
+                    <validate>validate-digits</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+
+                <field id="category_swr" translate="label comment" type="text" sortOrder="50"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Category stale-while-revalidate</label>
+                    <comment>Empty inherits the global stale-while-revalidate.</comment>
+                    <config_path>transparentedge/cache_profiles/category_swr</config_path>
+                    <validate>validate-digits</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+
+                <field id="product_ttl" translate="label comment" type="text" sortOrder="60"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Product CDN TTL (s-maxage)</label>
+                    <comment>Empty inherits the HTML CDN TTL.</comment>
+                    <config_path>transparentedge/cache_profiles/product_ttl</config_path>
+                    <validate>validate-digits</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+
+                <field id="product_swr" translate="label comment" type="text" sortOrder="70"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Product stale-while-revalidate</label>
+                    <comment>Empty inherits the global stale-while-revalidate.</comment>
+                    <config_path>transparentedge/cache_profiles/product_swr</config_path>
+                    <validate>validate-digits</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+
+                <field id="cms_ttl" translate="label comment" type="text" sortOrder="80"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>CMS page CDN TTL (s-maxage)</label>
+                    <comment>Empty inherits the HTML CDN TTL. CMS pages change rarely, so a longer TTL is usually safe.</comment>
+                    <config_path>transparentedge/cache_profiles/cms_ttl</config_path>
+                    <validate>validate-digits</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+
+                <field id="cms_swr" translate="label comment" type="text" sortOrder="90"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>CMS page stale-while-revalidate</label>
+                    <comment>Empty inherits the global stale-while-revalidate.</comment>
+                    <config_path>transparentedge/cache_profiles/cms_swr</config_path>
+                    <validate>validate-digits</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
+
+            <!-- ═══════════════════════════════════════════ -->
             <!-- Warm-up Settings                           -->
             <!-- ═══════════════════════════════════════════ -->
             <group id="warmup" translate="label comment" type="text" sortOrder="30"

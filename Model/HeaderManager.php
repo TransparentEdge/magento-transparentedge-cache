@@ -30,6 +30,9 @@ class HeaderManager
     private const HEADER_TE_DEBUG        = 'X-TE-Debug';
     private const HEADER_TE_CACHE_STATUS = 'X-TE-Cache';
 
+    /** Debug-only: which cache profile answered this request. */
+    private const HEADER_TE_PAGE_TYPE    = 'X-TE-Page-Type';
+
     /**
      * Internal marker set by our own controllers.
      *
@@ -74,21 +77,29 @@ class HeaderManager
     private LoggerInterface $logger;
 
     /**
+     * @var CacheProfile
+     */
+    private CacheProfile $cacheProfile;
+
+    /**
      * @param Config           $config
      * @param TagResolver      $tagResolver
      * @param RequestInterface $request
      * @param LoggerInterface  $logger
+     * @param CacheProfile     $cacheProfile
      */
     public function __construct(
         Config           $config,
         TagResolver      $tagResolver,
         RequestInterface $request,
-        LoggerInterface  $logger
+        LoggerInterface  $logger,
+        CacheProfile     $cacheProfile
     ) {
-        $this->config      = $config;
-        $this->tagResolver = $tagResolver;
-        $this->request     = $request;
-        $this->logger      = $logger;
+        $this->config       = $config;
+        $this->tagResolver  = $tagResolver;
+        $this->request      = $request;
+        $this->logger       = $logger;
+        $this->cacheProfile = $cacheProfile;
     }
 
     /**
@@ -292,11 +303,18 @@ class HeaderManager
                 true
             );
         } else {
+            // Per-page-type profile. Falls back to the module-wide HTML
+            // profile when profiles are off or the page type is not one we
+            // treat specially, so behaviour is unchanged until it is enabled.
             $response->setHeader(
                 self::HEADER_CACHE_CONTROL,
-                $this->config->buildHtmlCacheControl(),
+                $this->cacheProfile->buildHtmlCacheControl(),
                 true
             );
+
+            if ($this->config->isDebugMode()) {
+                $response->setHeader(self::HEADER_TE_PAGE_TYPE, $this->cacheProfile->getPageType(), true);
+            }
         }
     }
 
