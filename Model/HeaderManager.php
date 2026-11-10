@@ -31,6 +31,21 @@ class HeaderManager
     private const HEADER_TE_CACHE_STATUS = 'X-TE-Cache';
 
     /**
+     * Internal marker set by our own controllers.
+     *
+     * A controller of ours that has already chosen its Surrogate-Keys and its
+     * TTL on purpose (the Speculation Rules endpoint tags itself so it can be
+     * invalidated on its own; the health endpoint must never be cached) sets
+     * this header. applyHeaders() then leaves the response exactly as it is
+     * and strips the marker, so it never reaches the client.
+     *
+     * This is a marker rather than a check on the Cache-Control value because
+     * Magento itself emits s-maxage in some configurations: sniffing the value
+     * would make the plugin stop setting TTLs on ordinary pages.
+     */
+    public const HEADER_TE_OWN = 'X-TE-Own-Headers';
+
+    /**
      * Static file extensions that should get static TTLs
      */
     private const STATIC_EXTENSIONS = [
@@ -84,6 +99,24 @@ class HeaderManager
      */
     public function applyHeaders(HttpResponse $response): void
     {
+        try {
+            $this->applyHeadersInternal($response);
+        } catch (\Throwable $e) {
+            // Log where the failure actually happened, with the logger this
+            // object already holds, then let the response through untouched.
+            $this->logger->warning('TransparentEdge: could not apply cache headers', [
+                'exception' => get_class($e),
+                'error'     => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * @param  HttpResponse $response
+     * @return void
+     */
+    private function applyHeadersInternal(HttpResponse $response): void
+    {
         if (!$this->config->isEnabled()) {
             return;
         }
@@ -91,6 +124,24 @@ class HeaderManager
         // Don't cache non-GET/HEAD requests
         $method = $this->request->getMethod();
         if (!in_array($method, ['GET', 'HEAD'], true)) {
+            return;
+        }
+
+        // One of our own controllers already set its headers deliberately.
+        // Strip the marker and leave the response untouched.
+        if ($response->getHeader(self::HEADER_TE_OWN)) {
+            $response->clearHeader(self::HEADER_TE_OWN);
+            return;
+        }
+
+        // Never let an error response be cached at the edge. A transient 5xx
+        // (an upstream blip, a 503 from maintenance mode) pinned for the full
+        // s-maxage — 48h by default — keeps the site down long after it
+        // recovered. 404 is the one error worth caching, and the generated VCL
+        // gives it its own short TTL.
+        $status = (int) $response->getHttpResponseCode();
+        if ($status >= 400 && $status !== 404) {
+            $this->setNoCacheHeaders($response);
             return;
         }
 
@@ -179,9 +230,26 @@ class HeaderManager
 
         $surrogateKey = $this->tagResolver->buildSurrogateKeyHeader($tags);
 
-        if (!empty($surrogateKey)) {
-            $response->setHeader(self::HEADER_SURROGATE_KEY, $surrogateKey, true);
+        if (empty($surrogateKey)) {
+            return;
         }
+
+        // Never destroy keys another layer already set: a module (or a future
+        // controller of ours without the marker above) may have tagged this
+        // response for its own surgical invalidation. Merge, don't replace.
+        $existing = $response->getHeader(self::HEADER_SURROGATE_KEY);
+        if ($existing) {
+            $existingValue = is_object($existing) ? $existing->getFieldValue() : (string) $existing;
+            $merged = array_filter(
+                array_map('trim', explode(' ', $existingValue . ' ' . $surrogateKey)),
+                static fn(string $k): bool => $k !== ''
+            );
+            $merged = array_unique($merged);
+            sort($merged);
+            $surrogateKey = implode(' ', $merged);
+        }
+
+        $response->setHeader(self::HEADER_SURROGATE_KEY, $surrogateKey, true);
     }
 
     /**

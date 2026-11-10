@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace TransparentEdge\CDN\Controller\SpeculationRules;
 
 use TransparentEdge\CDN\Model\Config;
+use TransparentEdge\CDN\Model\HeaderManager;
 use TransparentEdge\CDN\Model\SpeculationRules\Generator;
 use Magento\Framework\App\Action\HttpGetActionInterface;
 use Magento\Framework\App\ResponseInterface;
@@ -44,9 +45,16 @@ class Index implements HttpGetActionInterface
         /** @var Raw $result */
         $result = $this->resultFactory->create(ResultFactory::TYPE_RAW);
 
+        // This endpoint chooses its own Surrogate-Keys and its own TTL on
+        // purpose, so HeaderManager must leave the response alone. Without
+        // this marker it replaced both: the surgical te-speculation-rules key
+        // became te-all, and the 24h edge TTL became the global HTML TTL.
+        $result->setHeader(HeaderManager::HEADER_TE_OWN, '1', true);
+
         if (!$this->config->isSpeculationEnabled()) {
             $result->setHttpResponseCode(404);
             $result->setHeader('Content-Type', 'application/json', true);
+            $result->setHeader('Cache-Control', 'no-cache, no-store', true);
             $result->setContents('{"error":"Speculation Rules disabled"}');
             return $result;
         }

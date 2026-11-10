@@ -42,15 +42,30 @@ composer require transparentedge/magento2-cdn:^2.0
 bin/magento module:enable TransparentEdge_CDN
 bin/magento setup:upgrade
 bin/magento setup:di:compile
+bin/magento setup:static-content:deploy -f es_ES en_US   # ver nota
 bin/magento cache:flush
 ```
+
+> **En modo producción, `setup:static-content:deploy` no es opcional.**
+> `setup:upgrade` vacía `pub/static`, y si el despliegue de estáticos no se
+> vuelve a lanzar la portada responde HTTP 500 con
+> `Unable to retrieve deployment version of static files`. Sustituye los
+> códigos de idioma por los de tu tienda. En modo `developer` puedes omitirlo.
 
 Para actualizar:
 
 ```bash
 composer update transparentedge/magento2-cdn
-bin/magento setup:di:compile && bin/magento cache:flush
+bin/magento setup:upgrade
+bin/magento setup:di:compile
+bin/magento setup:static-content:deploy -f es_ES en_US
+bin/magento cache:flush
 ```
+
+Si el despliegue de estáticos corre con tráfico en vivo, `setup:di:compile`
+puede fallar con `Directory not empty` al vaciar `generated/code`: los workers
+de PHP-FPM regeneran interceptores mientras el compilador borra. Lánzalo entre
+`bin/magento maintenance:enable` y `bin/magento maintenance:disable`.
 
 Si Composer resuelve una versión antigua, vacía su caché con
 `composer clear-cache` y comprueba lo instalado con
@@ -69,8 +84,9 @@ chown -R www-data:www-data app/code/TransparentEdge/
 bin/magento module:enable TransparentEdge_CDN
 bin/magento setup:upgrade
 bin/magento setup:di:compile
+bin/magento setup:static-content:deploy -f es_ES en_US   # en modo producción
 bin/magento cache:flush
-chown -R www-data:www-data generated/ var/
+chown -R www-data:www-data generated/ var/ pub/static/
 ```
 
 ## Configuración

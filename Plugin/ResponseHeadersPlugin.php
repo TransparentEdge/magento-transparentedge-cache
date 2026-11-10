@@ -82,6 +82,25 @@ class ResponseHeadersPlugin
         } catch (\Throwable $e) {
             // The CDN is an accelerator, not a critical component. Never let a
             // failure here break the response the customer is waiting for.
+            //
+            // But do leave a trace: swallowing this silently made failures
+            // invisible in the customer's logs, which is the hardest kind to
+            // support. We deliberately use PHP's own error_log() rather than
+            // an injected LoggerInterface. Reaching this catch usually means
+            // one of the two Proxies above failed to CONSTRUCT, so building
+            // another object graph just to report it is the last thing we
+            // want — and an undeclared LoggerInterface would resolve to the
+            // global Monolog, the very graph whose third-party processors
+            // caused the fatal this plugin was hardened against in v2.0.6.
+            // HeaderManager and HtmlOptimizer log their own runtime failures
+            // to the module log with the logger they already hold.
+            error_log(sprintf(
+                'TransparentEdge_CDN: response processing failed in area "%s": %s: %s',
+                $areaCode,
+                get_class($e),
+                $e->getMessage()
+            ));
+
             return;
         }
     }
