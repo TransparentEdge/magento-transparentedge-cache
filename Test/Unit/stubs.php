@@ -168,12 +168,18 @@ namespace TransparentEdge\CDN\Model {
         public bool $enabled = true;
         public bool $debug = false;
         public bool $speculation = false;
+        public bool $softPurge = true;
+        public bool $refetch = false;
         public string $speculationInjection = 'php';
         public array $excludeUrls = [];
 
         public function isEnabled(): bool { return $this->enabled; }
         public function isDebugMode(): bool { return $this->debug; }
         public function isSpeculationEnabled(): bool { return $this->speculation; }
+        public function isSoftPurgeEnabled(): bool { return $this->softPurge; }
+        public function isRefetchEnabled(): bool { return $this->refetch; }
+        public function getInvalidateEndpoint(): string { return 'https://api.test/v1/companies/426/tag_invalidate/'; }
+        public function getUrlInvalidateEndpoint(): string { return 'https://api.test/v1/companies/426/invalidate/'; }
         public function getSpeculationInjection(): string { return $this->speculationInjection; }
         public function getSpeculationRulesUrl(): string { return 'https://tienda.test/transparentedge/speculationRules/index'; }
         public function getExcludeUrls(): array { return $this->excludeUrls; }

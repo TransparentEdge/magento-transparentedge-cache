@@ -31,22 +31,22 @@
                 <refetch>0</refetch>
             </cache>
             <!--
-                Per-page-type cache profiles. Empty values inherit the HTML
-                settings above, so out of the box only the homepage differs:
-                a 5 minute fresh window with a 24h stale-while-revalidate, so
-                it refreshes itself without depending on a product tag that
-                Magento's block_html cache usually strips from the page.
+                Per-page-type cache profiles. Each type gets a stale window
+                much longer than its fresh window: once the fresh window
+                passes the edge still answers instantly from the stale copy
+                while one request revalidates behind it, so a short TTL costs
+                almost nothing. Empty inherits the HTML settings above.
             -->
             <cache_profiles>
                 <enabled>1</enabled>
                 <home_ttl>300</home_ttl>              <!-- 5m -->
                 <home_swr>86400</home_swr>            <!-- 1d -->
-                <category_ttl/>
-                <category_swr/>
-                <product_ttl/>
-                <product_swr/>
-                <cms_ttl/>
-                <cms_swr/>
+                <category_ttl>3600</category_ttl>     <!-- 1h -->
+                <category_swr>86400</category_swr>    <!-- 1d -->
+                <product_ttl>86400</product_ttl>      <!-- 1d -->
+                <product_swr>86400</product_swr>      <!-- 1d -->
+                <cms_ttl>172800</cms_ttl>             <!-- 2d -->
+                <cms_swr>172800</cms_swr>             <!-- 2d -->
             </cache_profiles>
             <warmup>
                 <enabled>1</enabled>

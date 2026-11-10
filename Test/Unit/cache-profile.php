@@ -72,12 +72,30 @@ check('max-age del navegador no supera al del edge',
     dcc($cc, 'max-age') !== null && dcc($cc, 'max-age') <= dcc($cc, 's-maxage'),
     'max-age=' . dcc($cc, 'max-age') . ' s-maxage=' . dcc($cc, 's-maxage'));
 
-echo "\n=== por defecto NO se toca ningun otro tipo de pagina ===\n";
+echo "\n=== cada tipo con su propio perfil ===\n";
 $global = (new \TransparentEdge\CDN\Model\Config())->buildHtmlCacheControl();
-foreach (['catalog_category_view', 'catalog_product_view', 'cms_page_view', 'checkout_cart_index'] as $accion) {
+foreach ([
+    'catalog_category_view' => 3600,
+    'catalog_product_view'  => 86400,
+    'cms_page_view'         => 172800,
+] as $accion => $esperado) {
     $cc = profile($accion)->buildHtmlCacheControl();
-    check("$accion mantiene el perfil global", $cc === $global, $cc);
+    printf("  %-24s %s\n", $accion, $cc);
+    check("$accion -> s-maxage=$esperado", dcc($cc, 's-maxage') === $esperado, (string) dcc($cc, 's-maxage'));
+    // La ventana rancia siempre debe cubrir de sobra la fresca.
+    check("$accion: swr >= ttl", dcc($cc, 'stale-while-revalidate') >= dcc($cc, 's-maxage'),
+        sprintf('swr=%d ttl=%d', dcc($cc, 'stale-while-revalidate'), dcc($cc, 's-maxage')));
 }
+$cc = profile('checkout_cart_index')->buildHtmlCacheControl();
+check('un tipo no contemplado mantiene el perfil global', $cc === $global, $cc);
+
+echo "\n=== la portada es la mas corta de las cuatro ===\n";
+$ttls = [];
+foreach (['cms_index_index', 'catalog_category_view', 'catalog_product_view', 'cms_page_view'] as $accion) {
+    $ttls[$accion] = dcc(profile($accion)->buildHtmlCacheControl(), 's-maxage');
+}
+check('la portada tiene el TTL mas bajo', $ttls['cms_index_index'] === min($ttls), json_encode($ttls));
+check('las paginas CMS el mas alto', $ttls['cms_page_view'] === max($ttls), json_encode($ttls));
 
 echo "\n=== con los perfiles desactivados todo vuelve al global ===\n";
 foreach (['cms_index_index', 'catalog_category_view'] as $accion) {

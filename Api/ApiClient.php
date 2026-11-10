@@ -98,7 +98,15 @@ class ApiClient
 
         // Soft purge support
         if ($this->config->isSoftPurgeEnabled()) {
-            $payload['soft_purge'] = true;
+            // The field is "soft", not "soft_purge". The platform ignores an
+            // unknown field, so every invalidation this module sent with
+            // soft_purge was silently a HARD purge: the object was dropped
+            // instead of marked stale, and the next visitor paid a full
+            // origin fetch rather than being served the stale copy while it
+            // revalidated. Soft purge is on by default, so this affected
+            // every install. Confirmed against the platform documentation and
+            // against the WordPress plugin, which has always sent "soft".
+            $payload['soft'] = true;
         }
 
         // Refetch support
@@ -120,21 +128,62 @@ class ApiClient
      * @param  array $urls Array of full URL strings
      * @return array{success: bool, status: int, message: string}
      */
-    public function invalidateByUrls(array $urls): array
+    /**
+     * Invalidate a list of URLs.
+     *
+     * @param  string[]  $urls
+     * @param  bool|null $soft    null follows the module setting.
+     * @param  bool|null $refetch null follows the module setting. When true
+     *                            the platform re-fetches the object on every
+     *                            edge node by itself, and its refetchers
+     *                            collapse those into one or two origin
+     *                            requests in total.
+     * @return array{success: bool, status: int, message: string}
+     */
+    public function invalidateByUrls(array $urls, ?bool $soft = null, ?bool $refetch = null): array
     {
         if (empty($urls)) {
             return ['success' => false, 'status' => 0, 'message' => 'No URLs provided'];
         }
 
         $endpoint = $this->config->getUrlInvalidateEndpoint();
-        $payload  = ['urls' => $urls];
+        $payload  = ['urls' => array_values($urls)];
+
+        if ($soft ?? $this->config->isSoftPurgeEnabled()) {
+            $payload['soft'] = true;
+        }
+
+        if ($refetch ?? $this->config->isRefetchEnabled()) {
+            $payload['refetch'] = true;
+        }
 
         $this->logger->info('TransparentEdge: Invalidating URLs', [
-            'urls'  => $urls,
-            'count' => count($urls),
+            'urls'    => $urls,
+            'count'   => count($urls),
+            'soft'    => isset($payload['soft']),
+            'refetch' => isset($payload['refetch']),
         ]);
 
         return $this->post($endpoint, $payload);
+    }
+
+    /**
+     * Warm a list of URLs across the whole edge.
+     *
+     * This is a soft invalidation with refetch, which is how the platform
+     * warms: every node re-fetches the object itself and the refetchers
+     * aggregate, so the origin sees one or two requests in total rather than
+     * one per URL per node. It replaces the previous approach of issuing an
+     * HTTP GET per URL from Magento, which loaded the origin once per URL,
+     * warmed only the single node that answered, and — on any site with Bot
+     * Management enabled — was answered with 403.
+     *
+     * @param  string[] $urls
+     * @return array{success: bool, status: int, message: string}
+     */
+    public function warmUrls(array $urls): array
+    {
+        return $this->invalidateByUrls($urls, true, true);
     }
 
     /**
@@ -303,7 +352,14 @@ class ApiClient
      * @param  array  $payload Request body
      * @return array{success: bool, status: int, message: string}
      */
-    private function post(string $url, array $payload): array
+    /**
+     * POST a JSON payload to the API.
+     *
+     * protected, not private, so the test harness can subclass this class and
+     * capture the exact payload. The field names are a contract with the
+     * platform and a silent typo in one of them cost us soft purge entirely.
+     */
+    protected function post(string $url, array $payload): array
     {
         $token = $this->getToken();
         if (!$token) {

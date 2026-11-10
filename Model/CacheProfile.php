@@ -66,25 +66,28 @@ class CacheProfile
     /**
      * Defaults, in seconds: [edge TTL, stale-while-revalidate].
      *
-     * Only the homepage differs out of the box. 0 means "inherit the
-     * module-wide HTML setting", so enabling profiles changes exactly one
-     * page type and nothing else: an upgrade cannot quietly alter the TTL of
-     * a whole catalogue.
+     * Page types do not age at the same speed, so one TTL for all of them is
+     * wrong in both directions at once: too long for the homepage, needlessly
+     * short for a legal notice. A value of 0 inherits the module-wide HTML
+     * setting.
      *
-     * The homepage gets a 5 minute fresh window with a 24h stale window. The
-     * edge still answers instantly from the stale copy; the only cost is one
-     * revalidation every five minutes for a single URL, and in exchange the
-     * page stops depending on a product tag that, as the class docblock
-     * explains, is usually missing from the cached object.
+     * Every type gets a stale window that is much longer than its fresh
+     * window. That is what makes short TTLs cheap: once the fresh window
+     * passes, the edge still answers instantly from the stale copy while a
+     * single request revalidates behind it. Nobody waits.
      *
-     * Category and product pages are tagged reliably, so they keep the global
-     * TTL and lean on invalidation, which is both cheaper and more precise.
+     *  - Homepage: changes with every product and every stock movement, and
+     *    is the page that loses its product keys to Magento's block_html
+     *    cache (see the class docblock). Shortest window of the four.
+     *  - Category: changes with the catalogue, and is tagged reliably.
+     *  - Product: tagged reliably, so it can lean on invalidation.
+     *  - CMS: rarely changes at all.
      */
     private const DEFAULTS = [
-        self::TYPE_HOME     => ['ttl' => 300, 'swr' => 86400],
-        self::TYPE_CATEGORY => ['ttl' => 0,   'swr' => 0],
-        self::TYPE_PRODUCT  => ['ttl' => 0,   'swr' => 0],
-        self::TYPE_CMS      => ['ttl' => 0,   'swr' => 0],
+        self::TYPE_HOME     => ['ttl' => 300,    'swr' => 86400],
+        self::TYPE_CATEGORY => ['ttl' => 3600,   'swr' => 86400],
+        self::TYPE_PRODUCT  => ['ttl' => 86400,  'swr' => 86400],
+        self::TYPE_CMS      => ['ttl' => 172800, 'swr' => 172800],
     ];
 
     private ScopeConfigInterface $scopeConfig;

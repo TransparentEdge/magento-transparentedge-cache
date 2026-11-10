@@ -45,11 +45,17 @@ jobs:
       - name: Perfiles de cache por tipo de pagina
         run: php Test/Unit/cache-profile.php
 
+      - name: Contrato de payload con la plataforma
+        run: php Test/Unit/api-payload.php
+
       - name: Diagnostico del entorno
         run: php Test/Unit/diagnostics.php
 
       - name: Perfiles de cache por tipo de pagina
         run: php Test/Unit/cache-profile.php
+
+      - name: Contrato de payload con la plataforma
+        run: php Test/Unit/api-payload.php
 
       - name: composer validate
         run: composer validate --no-check-publish --no-check-lock

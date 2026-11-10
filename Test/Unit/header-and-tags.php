@@ -212,7 +212,7 @@ $res->setHeader('X-Magento-Cache-Control', 'max-age=86400, public');
 $m->applyHeaders($res);
 $cc = $res->getHeader('Cache-Control')->getFieldValue();
 printf("  categoria: %s\n", $cc);
-check('la categoria mantiene el TTL global', str_contains($cc, 's-maxage=172800'), $cc);
+check('la categoria recibe su propio s-maxage=3600', str_contains($cc, 's-maxage=3600'), $cc);
 
 echo "\n";
 printf("RESULTADO: %d correctas, %d fallos\n", $pass, $fail);
