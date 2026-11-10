@@ -346,19 +346,47 @@ class Invalidator
             $this->warmup->queueUrl($this->config->getBaseUrl() . '/');
         }
 
-        // If categories were invalidated, warm category pages
+        // Warm the categories that were invalidated — not every category
+        // there is. This used to pull the whole tree on any category key,
+        // on every single save, which on a busy catalogue turns the shop's
+        // own editors into a load generator against its origin.
         if ($this->config->isWarmupCategories()) {
-            $categoryKeys = array_filter($invalidatedKeys, function ($key) {
-                return strpos($key, 'category-') === 0 || $key === 'te-categories';
-            });
+            $categoryIds = $this->extractCategoryIds($invalidatedKeys);
 
-            if (!empty($categoryKeys)) {
-                $this->warmup->scheduleCategories();
+            if ($categoryIds !== []) {
+                $this->warmup->scheduleCategories($categoryIds);
+            } elseif (in_array('te-categories', $invalidatedKeys, true)) {
+                // A blanket category invalidation carries no ids. Leave it to
+                // the edge: soft purge plus stale-while-revalidate revalidates
+                // each page on its first real request, at one render per page
+                // somebody actually wants.
+                $this->warmup->scheduleCategories([]);
             }
         }
 
-        // Process queued warm-up URLs
-        $this->warmup->processQueue();
+        // Never warm inline. An edit leaves URLs behind and returns; the
+        // cron drains them, deduplicated, under the hourly budget. Warming
+        // here used to run inside the admin save request.
+        $this->warmup->deferQueue();
+    }
+
+    /**
+     * Pull numeric ids out of category-<id> surrogate keys.
+     *
+     * @param  array $invalidatedKeys
+     * @return array<int>
+     */
+    private function extractCategoryIds(array $invalidatedKeys): array
+    {
+        $ids = [];
+
+        foreach ($invalidatedKeys as $key) {
+            if (preg_match('/^(?:te-)?category-(\d+)$/', (string) $key, $m) === 1) {
+                $ids[] = (int) $m[1];
+            }
+        }
+
+        return array_values(array_unique($ids));
     }
 
     /**

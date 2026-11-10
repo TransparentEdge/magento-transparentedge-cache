@@ -14,7 +14,17 @@
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Cron:etc/crontab.xsd">
     <group id="default">
-        <!-- Scheduled warm-up: run every 6 hours -->
+        <!--
+            Drains whatever content edits left behind. Short cycle on
+            purpose: it is what collapses a burst of edits into one warm-up.
+        -->
+        <job name="transparentedge_deferred_warmup"
+             instance="TransparentEdge\CDN\Cron\DeferredWarmup"
+             method="execute">
+            <schedule>*/5 * * * *</schedule>
+        </job>
+
+        <!-- Full sweep every 6 hours. Disabled unless switched on. -->
         <job name="transparentedge_scheduled_warmup"
              instance="TransparentEdge\CDN\Cron\ScheduledWarmup"
              method="execute">

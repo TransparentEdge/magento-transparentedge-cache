@@ -169,6 +169,7 @@ namespace TransparentEdge\CDN\Model {
         public bool $debug = false;
         public bool $speculation = false;
         public bool $softPurge = true;
+        public int $warmupRateLimit = 3;
         public bool $refetch = false;
         public string $speculationInjection = 'php';
         public array $excludeUrls = [];
@@ -177,6 +178,21 @@ namespace TransparentEdge\CDN\Model {
         public function isDebugMode(): bool { return $this->debug; }
         public function isSpeculationEnabled(): bool { return $this->speculation; }
         public function isSoftPurgeEnabled(): bool { return $this->softPurge; }
+        public function getWarmupRateLimit(): int { return $this->warmupRateLimit; }
+        public function isWarmupSslVerify(): bool { return true; }
+        public bool $warmupEnabled = true;
+        public function isWarmupEnabled(): bool { return $this->warmupEnabled; }
+        public function isWarmupHomepage(): bool { return true; }
+        public function isWarmupCategories(): bool { return false; }
+        public function isWarmupSitemap(): bool { return false; }
+        public bool $scheduledWarmup = false;
+        public int $hourlyBudget = 300;
+        public function isScheduledWarmupEnabled(): bool { return $this->scheduledWarmup; }
+        public function getWarmupHourlyBudget(): int { return max(0, $this->hourlyBudget); }
+        public function getWarmupSitemapUrl(): string { return ''; }
+        public function getWarmupCustomUrls(): array { return []; }
+        public function getBaseUrl(): string { return 'https://t.test'; }
+        public function shouldLog(string $level): bool { return false; }
         public function isRefetchEnabled(): bool { return $this->refetch; }
         public function getInvalidateEndpoint(): string { return 'https://api.test/v1/companies/426/tag_invalidate/'; }
         public function getUrlInvalidateEndpoint(): string { return 'https://api.test/v1/companies/426/invalidate/'; }

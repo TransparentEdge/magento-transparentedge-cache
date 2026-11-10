@@ -62,6 +62,8 @@ class Config
     public const WARMUP_SITEMAP_URL    = 'transparentedge/warmup/sitemap_url';
     public const WARMUP_RATE_LIMIT     = 'transparentedge/warmup/rate_limit';
     public const WARMUP_CUSTOM_URLS    = 'transparentedge/warmup/custom_urls';
+    public const WARMUP_SCHEDULED      = 'transparentedge/warmup/scheduled';
+    public const WARMUP_HOURLY_BUDGET  = 'transparentedge/warmup/hourly_budget';
 
     /**
      * i3 settings
@@ -107,6 +109,7 @@ class Config
     public const DEFAULT_SWR                = 86400;     // 1d
     public const DEFAULT_SIE                = 86400;     // 1d
     public const DEFAULT_WARMUP_RATE        = 3;         // req/s
+    public const DEFAULT_WARMUP_BUDGET      = 300;       // URLs/hour
 
     /**
      * API constants
@@ -240,11 +243,58 @@ class Config
         return $this->scopeConfig->isSetFlag(self::WARMUP_SITEMAP, ScopeInterface::SCOPE_STORE);
     }
 
+    /**
+     * Periodic full sweep (homepage + categories + custom URLs + sitemap),
+     * off by default.
+     *
+     * A sweep re-fetches every listed URL whether or not anyone has asked for
+     * it, so it costs one origin render per URL every time it runs. With soft
+     * purge and stale-while-revalidate the edge already revalidates on the
+     * first real request, at one render per URL somebody actually wants. The
+     * sweep only earns its cost on a site with very uneven traffic, where a
+     * page can go cold between visits, so it is opt-in.
+     */
+    public function isScheduledWarmupEnabled(): bool
+    {
+        return $this->scopeConfig->isSetFlag(self::WARMUP_SCHEDULED, ScopeInterface::SCOPE_STORE);
+    }
+
+    /**
+     * Ceiling on URLs warmed per clock hour, across every source.
+     *
+     * This is the backstop against amplification. Warming is triggered by
+     * content edits, and edits arrive in bursts: several editors saving
+     * products all afternoon, a bulk import, a price feed. Without a ceiling
+     * each of those saves can queue the whole category tree, and the shop
+     * ends up ordering a re-render of its own catalogue over and over.
+     *
+     * 0 disables the ceiling. Do that only if you have measured what the
+     * origin takes.
+     */
+    public function getWarmupHourlyBudget(): int
+    {
+        $value = $this->scopeConfig->getValue(self::WARMUP_HOURLY_BUDGET, ScopeInterface::SCOPE_STORE);
+        if ($value === null || $value === '') {
+            return self::DEFAULT_WARMUP_BUDGET;
+        }
+        return max(0, (int) $value);
+    }
+
     public function getWarmupSitemapUrl(): string
     {
         return (string) $this->scopeConfig->getValue(self::WARMUP_SITEMAP_URL, ScopeInterface::SCOPE_STORE);
     }
 
+    /**
+     * Requests per second allowed against the Transparent Edge API while
+     * warming.
+     *
+     * This used to be read as a concurrency cap for HTTP requests against the
+     * shop itself, which is not what its label promised and not what it did:
+     * it set the size of a Guzzle pool and throttled nothing. Warming no
+     * longer touches the shop at all, so the value now paces API calls, which
+     * is a rate and can be honoured literally.
+     */
     public function getWarmupRateLimit(): int
     {
         return (int) ($this->scopeConfig->getValue(self::WARMUP_RATE_LIMIT, ScopeInterface::SCOPE_STORE)

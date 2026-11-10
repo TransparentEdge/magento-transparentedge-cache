@@ -13,6 +13,7 @@ declare(strict_types=1);
 $repo = __DIR__ . '/../..';
 
 require __DIR__ . '/stubs.php';
+require __DIR__ . '/stubs-api.php';         // por el doble de CacheInterface
 require $repo . '/Model/Diagnostics.php';   // clase real
 
 use TransparentEdge\CDN\Model\Diagnostics;
@@ -41,17 +42,34 @@ final class FakeCacheState implements \Magento\Framework\App\Cache\StateInterfac
     public function persist() {}
 }
 
-function build(?int $cachingApplication, bool $fpcEnabled = true, bool $moduleEnabled = true): Diagnostics {
+function build(
+    ?int   $cachingApplication,
+    bool   $fpcEnabled = true,
+    bool   $moduleEnabled = true,
+    // 'fresco' = el cron acaba de correr, que es lo normal y lo que deben
+    // suponer las pruebas que no van de esto. 'nunca' = sin latido.
+    array|string $latido = 'fresco',
+    bool   $warmupEnabled = true
+): Diagnostics {
     $cfg = new \TransparentEdge\CDN\Model\Config();
     $cfg->enabled = $moduleEnabled;
+    $cfg->warmupEnabled = $warmupEnabled;
     $valores = ['system/full_page_cache/ttl' => 86400];
     if ($cachingApplication !== null) {
         $valores['system/full_page_cache/caching_application'] = $cachingApplication;
     }
+    $cache = new \TransparentEdge\CDN\Test\FakeCache();
+    if ($latido === 'fresco') {
+        $latido = ['at' => time() - 60, 'pending' => 0, 'warmed' => 0];
+    }
+    if (is_array($latido)) {
+        $cache->save((string) json_encode($latido), Diagnostics::WARMUP_HEARTBEAT_KEY);
+    }
     return new Diagnostics(
         new FakeScopeConfig($valores),
         new FakeCacheState(['full_page' => $fpcEnabled]),
-        $cfg
+        $cfg,
+        $cache
     );
 }
 
@@ -111,6 +129,43 @@ foreach ($d->run() as $c) {
         $c['severity']);
     check("'{$c['id']}' tiene titulo", trim($c['title']) !== '');
 }
+
+// ──────────────────────────────────────────────
+// El cron del precalentado: el fallo silencioso que introdujo diferirlo
+// ──────────────────────────────────────────────
+
+echo "\n=== el cron del precalentado nunca ha corrido ===\n";
+$c = find(build(2, true, true, 'nunca')->run(), 'warmup_cron');
+check('aparece el chequeo', $c !== null);
+check('es un aviso, no critico', $c['severity'] === Diagnostics::SEVERITY_WARNING, $c['severity'] ?? '');
+check('no tumba el estado general', build(2, true, true, 'nunca')->hasCriticalProblem() === false);
+check('da una salida', str_contains($c['fix'] ?? '', 'cron'), $c['fix'] ?? '');
+
+echo "\n=== el cron murio hace rato ===\n";
+$viejo = ['at' => time() - 3600, 'pending' => 4, 'warmed' => 4];
+$c = find(build(2, true, true, $viejo)->run(), 'warmup_cron');
+check('avisa', $c['severity'] === Diagnostics::SEVERITY_WARNING, $c['severity'] ?? '');
+check('dice cuantos minutos lleva parado', str_contains($c['title'], '60'), $c['title'] ?? '');
+
+echo "\n=== justo en el limite ===\n";
+$limite = Diagnostics::WARMUP_HEARTBEAT_STALE_AFTER;
+$c = find(build(2, true, true, ['at' => time() - ($limite - 60)])->run(), 'warmup_cron');
+check('por debajo del umbral esta OK', $c['severity'] === Diagnostics::SEVERITY_OK, $c['severity'] ?? '');
+$c = find(build(2, true, true, ['at' => time() - ($limite + 60)])->run(), 'warmup_cron');
+check('por encima del umbral avisa', $c['severity'] === Diagnostics::SEVERITY_WARNING, $c['severity'] ?? '');
+
+echo "\n=== el cron esta vivo ===\n";
+$c = find(build(2, true, true, ['at' => time() - 120, 'pending' => 7, 'warmed' => 7])->run(), 'warmup_cron');
+check('OK', $c['severity'] === Diagnostics::SEVERITY_OK, $c['severity'] ?? '');
+check('un drenado en vacio tambien cuenta como latido',
+    find(build(2, true, true, ['at' => time() - 60, 'pending' => 0, 'warmed' => 0])->run(), 'warmup_cron')['severity']
+    === Diagnostics::SEVERITY_OK);
+check('no sale en la lista de problemas',
+    find(build(2, true, true, ['at' => time() - 120])->getProblems(), 'warmup_cron') === null);
+
+echo "\n=== sin precalentado no se comprueba ===\n";
+check('el chequeo desaparece',
+    find(build(2, true, true, 'nunca', false)->run(), 'warmup_cron') === null);
 
 echo "\n";
 printf("RESULTADO: %d correctas, %d fallos\n", $pass, $fail);

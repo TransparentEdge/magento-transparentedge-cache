@@ -75,6 +75,9 @@
             <argument name="storeManager" xsi:type="object">Magento\Store\Model\StoreManagerInterface</argument>
             <argument name="appEmulation" xsi:type="object">Magento\Store\Model\App\Emulation</argument>
             <argument name="logger" xsi:type="object">TransparentEdge\CDN\Model\Logger</argument>
+            <argument name="apiClient" xsi:type="object">TransparentEdge\CDN\Api\ApiClient</argument>
+            <!-- Holds the deferred queue and the hourly spend counter. -->
+            <argument name="cache" xsi:type="object">Magento\Framework\App\CacheInterface</argument>
         </arguments>
     </type>
 

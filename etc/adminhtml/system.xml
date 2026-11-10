@@ -282,9 +282,10 @@
                     </depends>
                 </field>
 
-                <field id="categories" translate="label" type="select" sortOrder="30"
+                <field id="categories" translate="label comment" type="select" sortOrder="30"
                        showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Warm Category Pages</label>
+                    <comment><![CDATA[Warm the category pages affected by an edit. Only those: saving a product warms the categories it belongs to, not the whole tree.]]></comment>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                     <config_path>transparentedge/warmup/categories</config_path>
                     <depends>
@@ -315,10 +316,32 @@
 
                 <field id="rate_limit" translate="label comment" type="text" sortOrder="60"
                        showInDefault="1" showInWebsite="1" showInStore="1">
-                    <label>Rate Limit (req/s)</label>
-                    <comment>Maximum concurrent requests during warm-up. Default: 3. Increase only if your origin can handle it.</comment>
+                    <label>API Rate Limit (req/s)</label>
+                    <comment><![CDATA[Maximum requests per second sent to the Transparent Edge API while warming. Default: 3.<br/><br/>This no longer throttles requests to your own site: warming is delegated to the platform, which re-fetches each object on every edge node without going through this server. Your origin still renders each warmed page roughly once — the re-fetches are collapsed across nodes for a given page, not across different pages. Use the hourly budget below to cap that cost; this setting only paces our calls to the API.]]></comment>
                     <config_path>transparentedge/warmup/rate_limit</config_path>
                     <validate>validate-digits validate-digits-range digits-range-1-10</validate>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="hourly_budget" translate="label comment" type="text" sortOrder="65"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Hourly Warm-up Budget (URLs)</label>
+                    <comment><![CDATA[Most URLs warmed per hour, counting every source: content edits, the CLI command and the periodic sweep. Default: 300. Anything over the cap is skipped, not queued — the edge still revalidates those pages on their first real request.<br/><br/>This is the backstop against your own editors generating load: warming is triggered by edits, and edits arrive in bursts. 0 removes the cap; only do that once you have measured what your origin takes.]]></comment>
+                    <config_path>transparentedge/warmup/hourly_budget</config_path>
+                    <validate>validate-digits</validate>
+                    <depends>
+                        <field id="enabled">1</field>
+                    </depends>
+                </field>
+
+                <field id="scheduled" translate="label comment" type="select" sortOrder="66"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Periodic Full Sweep</label>
+                    <comment><![CDATA[Re-warm the homepage, categories, custom URLs and sitemap every 6 hours. Off by default.<br/><br/>A sweep re-fetches every listed URL whether or not anyone has asked for it, so it costs one origin render per URL, every time. Soft purge with stale-while-revalidate already revalidates pages on demand, at one render per page somebody actually wants. Turn this on only if your traffic is uneven enough for pages to go cold between visits.]]></comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/warmup/scheduled</config_path>
                     <depends>
                         <field id="enabled">1</field>
                     </depends>

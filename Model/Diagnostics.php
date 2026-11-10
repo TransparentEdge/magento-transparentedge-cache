@@ -12,6 +12,7 @@ declare(strict_types=1);
 namespace TransparentEdge\CDN\Model;
 
 use Magento\Framework\App\Cache\StateInterface;
+use Magento\Framework\App\CacheInterface;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 
 /**
@@ -42,6 +43,23 @@ class Diagnostics
     public const FPC_BUILT_IN = 1;
     public const FPC_VARNISH  = 2;
 
+    /**
+     * Heartbeat the warm-up drain stamps on every run, including idle ones.
+     *
+     * Declared here, next to the check that reads it, rather than on Warmup
+     * which writes it. Diagnostics is constructed on every admin dashboard
+     * render and on the public health endpoint, so it must not pull Warmup
+     * in — that would drag the category collection and store emulation along
+     * with it.
+     */
+    public const WARMUP_HEARTBEAT_KEY = 'te_cdn_warmup_heartbeat';
+
+    /**
+     * A heartbeat older than this means the cron is not running. The drain
+     * is scheduled every 5 minutes, so 15 tolerates a couple of misses.
+     */
+    public const WARMUP_HEARTBEAT_STALE_AFTER = 900;
+
     private const PATH_CACHING_APPLICATION = 'system/full_page_cache/caching_application';
     private const PATH_FPC_TTL             = 'system/full_page_cache/ttl';
 
@@ -51,15 +69,18 @@ class Diagnostics
     private ScopeConfigInterface $scopeConfig;
     private StateInterface $cacheState;
     private Config $config;
+    private CacheInterface $cache;
 
     public function __construct(
         ScopeConfigInterface $scopeConfig,
         StateInterface $cacheState,
-        Config $config
+        Config $config,
+        CacheInterface $cache
     ) {
         $this->scopeConfig = $scopeConfig;
         $this->cacheState  = $cacheState;
         $this->config      = $config;
+        $this->cache       = $cache;
     }
 
     /**
@@ -72,6 +93,7 @@ class Diagnostics
         $checks = [
             $this->checkFullPageCacheEnabled(),
             $this->checkCachingApplication(),
+            $this->checkWarmupCron(),
         ];
 
         return array_values(array_filter($checks));
@@ -183,6 +205,95 @@ class Diagnostics
             ),
             'fix'      => 'bin/magento cache:enable full_page && bin/magento cache:flush',
         ];
+    }
+
+    /**
+     * Is the warm-up cron alive?
+     *
+     * Warming used to happen inside the request that triggered it, which was
+     * its own problem: saving one product queued the whole category tree and
+     * processed it before the save returned. It now leaves URLs in a queue
+     * that Cron/DeferredWarmup drains every five minutes.
+     *
+     * That trade is worth making, but it buys a silent failure: with
+     * Magento's cron stopped — a dead crontab, a cron_schedule table wedged
+     * on stuck jobs, a consumer that never came back after a deploy —
+     * nothing warms, nothing errors, and the merchant has no way to tell.
+     * The drain stamps a heartbeat on every run, including the runs that
+     * find nothing to do, so its absence means the cron and not the queue.
+     *
+     * @return array|null Null when warming is off and the check is moot.
+     */
+    private function checkWarmupCron(): ?array
+    {
+        if (!$this->config->isWarmupEnabled()) {
+            return null;
+        }
+
+        $beat    = $this->loadWarmupHeartbeat();
+        $lastRun = (int) ($beat['at'] ?? 0);
+        $fix     = 'bin/magento cron:run --group=default   # and check your crontab: '
+            . 'bin/magento cron:install';
+
+        if ($lastRun === 0) {
+            return [
+                'id'       => 'warmup_cron',
+                'severity' => self::SEVERITY_WARNING,
+                'title'    => (string) __('Warm-up has never run'),
+                'detail'   => (string) __(
+                    'Warming is handed to a cron job that runs every five minutes, and it has not run '
+                    . 'once yet. On a site installed minutes ago that is expected. Otherwise Magento '
+                    . 'cron is not running and nothing is being warmed — silently, because a warm-up '
+                    . 'that never happens produces no error.'
+                ),
+                'fix'      => $fix,
+            ];
+        }
+
+        $age = time() - $lastRun;
+
+        if ($age > self::WARMUP_HEARTBEAT_STALE_AFTER) {
+            return [
+                'id'       => 'warmup_cron',
+                'severity' => self::SEVERITY_WARNING,
+                'title'    => (string) __('Warm-up stopped running %1 minutes ago', (int) floor($age / 60)),
+                'detail'   => (string) __(
+                    'The warm-up drain is scheduled every five minutes and last ran %1 minutes ago, so '
+                    . 'Magento cron has most likely stopped. Pages still cache and the edge still '
+                    . 'revalidates them on demand, but nothing is warmed ahead of the first visitor.',
+                    (int) floor($age / 60)
+                ),
+                'fix'      => $fix,
+            ];
+        }
+
+        return [
+            'id'       => 'warmup_cron',
+            'severity' => self::SEVERITY_OK,
+            'title'    => (string) __('Warm-up cron: running'),
+            'detail'   => (string) __(
+                'Last drain %1 minutes ago: %2 URL(s) queued by content edits, %3 warmed.',
+                (int) floor($age / 60),
+                (int) ($beat['pending'] ?? 0),
+                (int) ($beat['warmed'] ?? 0)
+            ),
+            'fix'      => '',
+        ];
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function loadWarmupHeartbeat(): array
+    {
+        $raw = $this->cache->load(self::WARMUP_HEARTBEAT_KEY);
+        if (!is_string($raw) || $raw === '') {
+            return [];
+        }
+
+        $decoded = json_decode($raw, true);
+
+        return is_array($decoded) ? $decoded : [];
     }
 
     /**

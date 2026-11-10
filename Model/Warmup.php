@@ -2,8 +2,31 @@
 /**
  * Cache warm-up engine for Transparent Edge CDN
  *
- * Non-blocking warm-up with rate limiting. Sends HTTP requests to key pages
- * after cache invalidation to ensure the CDN has fresh cached content.
+ * Warming is delegated to the platform: a soft invalidation with refetch on
+ * POST /v1/companies/{id}/invalidate/. Every edge node then re-fetches the
+ * object by itself and the refetchers collapse those fetches.
+ *
+ * Read that last sentence narrowly. The collapsing is per object across
+ * nodes: for ONE URL the origin sees one or two renders instead of one per
+ * PoP. It does not collapse across different URLs. Warming N URLs still
+ * costs the origin on the order of N renders, so the only real defence
+ * against amplification is warming fewer URLs. That is what the deferred
+ * queue and the hourly budget below are for.
+ *
+ * The previous implementation issued an HTTP GET per URL from Magento. That
+ * was wrong in three separate ways, all of them measured:
+ *
+ *  - It loaded the origin once per URL. A 200 URL batch meant 200 full page
+ *    renders.
+ *  - It warmed only the single edge node that answered the request, leaving
+ *    every other PoP cold. Worst of both worlds.
+ *  - It went out through the public URL, so on any site with Bot Management
+ *    enabled the platform answered 403 and the warm-up failed in silence.
+ *    We reproduced exactly that on our own test site.
+ *
+ * It also claimed to be non-blocking while ending in a blocking wait() on a
+ * Guzzle pool, inside a shutdown handler, which pinned a PHP-FPM worker for
+ * as long as the slowest page took — up to 200 URLs at a 30s timeout.
  *
  * @package   TransparentEdge_CDN
  * @author    Transparent Edge Services
@@ -16,21 +39,73 @@ namespace TransparentEdge\CDN\Model;
 
 use GuzzleHttp\ClientFactory;
 use GuzzleHttp\Exception\GuzzleException;
-use GuzzleHttp\Pool;
-use GuzzleHttp\Psr7\Request;
 use Magento\Catalog\Model\ResourceModel\Category\CollectionFactory as CategoryCollectionFactory;
-use Magento\Sitemap\Model\ResourceModel\Sitemap\CollectionFactory as SitemapCollectionFactory;
 use Magento\Store\Model\App\Emulation;
 use Magento\Framework\App\Area;
 use Magento\Store\Model\StoreManagerInterface;
+use Magento\Framework\App\CacheInterface;
 use Psr\Log\LoggerInterface;
+use TransparentEdge\CDN\Api\ApiClient;
 
 class Warmup
 {
     /**
-     * Maximum URLs per warm-up batch
+     * Maximum URLs collected in one warm-up run.
      */
     private const MAX_URLS_PER_BATCH = 200;
+
+    /**
+     * URLs per API call. The platform takes the whole list in one request;
+     * batching only keeps the payload and the log lines a sane size.
+     */
+    private const URLS_PER_API_CALL = 100;
+
+    /**
+     * Query parameters that decorate a URL without changing the page.
+     *
+     * Warming "/" and "/?___store=default" as two objects wastes half the
+     * budget and leaves one of them cold anyway.
+     */
+    private const DECORATIVE_PARAMS = ['___store', '___from_store', 'SID', '___SID'];
+
+    /**
+     * Cache key holding the deferred queue shared by every request.
+     */
+    private const DEFERRED_CACHE_KEY = 'te_cdn_warmup_deferred';
+
+    /**
+     * Cache key prefix for the per-clock-hour spend counter.
+     */
+    private const BUDGET_CACHE_PREFIX = 'te_cdn_warmup_budget_';
+
+    /**
+     * Proof that the drain cron ran, and what it found.
+     *
+     * Warming moved out of the request and into cron, which bought us the
+     * deduplication but introduced a way to fail in silence: with Magento's
+     * cron stopped nothing warms, nothing errors and nothing says so. This
+     * heartbeat is what Diagnostics reads to catch exactly that; the key
+     * lives there, next to the check, so Diagnostics need not construct a
+     * Warmup on every admin dashboard render.
+     */
+    private const HEARTBEAT_TTL = 86400;
+
+    /**
+     * Hard ceiling on the deferred queue, so a bulk import cannot grow it
+     * without bound between two drains.
+     */
+    private const MAX_DEFERRED_URLS = 2000;
+
+    /**
+     * How long a deferred URL stays worth warming. Past this it has either
+     * been requested by somebody (and is warm) or nobody wants it.
+     */
+    private const DEFERRED_TTL = 3600;
+
+    /**
+     * Cache tag for everything this class stores.
+     */
+    private const CACHE_TAG = 'TE_CDN_WARMUP';
 
     /**
      * @var Config
@@ -70,12 +145,24 @@ class Warmup
     private array $queue = [];
 
     /**
+     * @var ApiClient
+     */
+    private ApiClient $apiClient;
+
+    /**
+     * @var CacheInterface
+     */
+    private CacheInterface $cache;
+
+    /**
      * @param Config                    $config
      * @param ClientFactory             $clientFactory
      * @param CategoryCollectionFactory $categoryCollectionFactory
      * @param StoreManagerInterface     $storeManager
      * @param Emulation                 $appEmulation
      * @param LoggerInterface           $logger
+     * @param ApiClient                 $apiClient
+     * @param CacheInterface            $cache
      */
     public function __construct(
         Config                    $config,
@@ -83,7 +170,9 @@ class Warmup
         CategoryCollectionFactory $categoryCollectionFactory,
         StoreManagerInterface     $storeManager,
         Emulation                 $appEmulation,
-        LoggerInterface           $logger
+        LoggerInterface           $logger,
+        ApiClient                 $apiClient,
+        CacheInterface            $cache
     ) {
         $this->config                    = $config;
         $this->clientFactory             = $clientFactory;
@@ -91,6 +180,193 @@ class Warmup
         $this->storeManager              = $storeManager;
         $this->appEmulation              = $appEmulation;
         $this->logger                    = $logger;
+        $this->apiClient                 = $apiClient;
+        $this->cache                     = $cache;
+    }
+
+    // ──────────────────────────────────────────────
+    // Deferred queue
+    //
+    // Nothing triggered by a content edit warms anything inline. Saving a
+    // product used to queue the homepage plus every active category and
+    // process the lot before the save returned. Three editors at twenty
+    // saves an hour against a 200 category catalogue is 12.000 re-renders
+    // an hour, charged to the origin, and paid for inside the admin
+    // request. Edits now only leave URLs here; the cron drains them.
+    //
+    // Deferring buys the deduplication for free: sixty saves inside one
+    // drain window collapse into one set of distinct URLs, warmed once.
+    // ──────────────────────────────────────────────
+
+    /**
+     * Leave URLs for the next drain instead of warming them now.
+     *
+     * @param  array $urls
+     * @return int   Size of the deferred queue afterwards.
+     */
+    public function defer(array $urls): int
+    {
+        $pending = $this->loadDeferred();
+
+        foreach ($urls as $url) {
+            $url = $this->canonicalize((string) $url);
+            if ($url === '' || isset($pending[$url])) {
+                continue;
+            }
+            if (count($pending) >= self::MAX_DEFERRED_URLS) {
+                $this->logger->warning('TransparentEdge: warm-up queue full, dropping the rest', [
+                    'limit' => self::MAX_DEFERRED_URLS,
+                ]);
+                break;
+            }
+            $pending[$url] = 1;
+        }
+
+        $this->saveDeferred($pending);
+
+        return count($pending);
+    }
+
+    /**
+     * Move whatever is in the in-memory queue to the deferred one.
+     *
+     * Lets the schedule* helpers stay as they are: they fill the queue, the
+     * caller decides whether that queue goes out now (CLI, cron) or waits
+     * for the next drain (anything triggered by an edit).
+     *
+     * @return int Size of the deferred queue afterwards.
+     */
+    public function deferQueue(): int
+    {
+        $urls = $this->queue;
+        $this->queue = [];
+
+        return $this->defer($urls);
+    }
+
+    /**
+     * Warm everything left by defer() since the last drain.
+     *
+     * @return array {total, success, failed, calls}
+     */
+    public function drainDeferred(): array
+    {
+        $pending = $this->loadDeferred();
+        if ($pending === []) {
+            // Still a heartbeat: an idle drain proves the cron is alive.
+            $this->recordDrain(0, 0);
+
+            return ['total' => 0, 'success' => 0, 'failed' => 0, 'calls' => 0, 'skipped' => 0];
+        }
+
+        // Clear first. A drain that dies mid-flight must not leave the queue
+        // behind to be retried for ever against an origin already in trouble.
+        $this->cache->remove(self::DEFERRED_CACHE_KEY);
+
+        $this->queueUrls(array_keys($pending));
+
+        $result = $this->processQueue();
+        $this->recordDrain(count($pending), $result['total']);
+
+        return $result;
+    }
+
+    /**
+     * Stamp the heartbeat Diagnostics watches.
+     */
+    private function recordDrain(int $pending, int $warmed): void
+    {
+        $this->cache->save(
+            (string) json_encode([
+                'at'      => time(),
+                'pending' => $pending,
+                'warmed'  => $warmed,
+            ]),
+            Diagnostics::WARMUP_HEARTBEAT_KEY,
+            [self::CACHE_TAG],
+            self::HEARTBEAT_TTL
+        );
+    }
+
+    /**
+     * Number of URLs waiting for the next drain.
+     */
+    public function getDeferredSize(): int
+    {
+        return count($this->loadDeferred());
+    }
+
+    /**
+     * @return array<string,int> URL => 1
+     */
+    private function loadDeferred(): array
+    {
+        $raw = $this->cache->load(self::DEFERRED_CACHE_KEY);
+        if (!is_string($raw) || $raw === '') {
+            return [];
+        }
+
+        $decoded = json_decode($raw, true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    /**
+     * @param array<string,int> $pending
+     */
+    private function saveDeferred(array $pending): void
+    {
+        $this->cache->save(
+            (string) json_encode($pending),
+            self::DEFERRED_CACHE_KEY,
+            [self::CACHE_TAG],
+            self::DEFERRED_TTL
+        );
+    }
+
+    // ──────────────────────────────────────────────
+    // Hourly budget
+    // ──────────────────────────────────────────────
+
+    /**
+     * How many URLs may still be warmed this clock hour.
+     *
+     * @return int PHP_INT_MAX when the ceiling is disabled.
+     */
+    private function getRemainingBudget(): int
+    {
+        $budget = $this->config->getWarmupHourlyBudget();
+        if ($budget <= 0) {
+            return PHP_INT_MAX;
+        }
+
+        return max(0, $budget - $this->getSpentThisHour());
+    }
+
+    private function getSpentThisHour(): int
+    {
+        $raw = $this->cache->load(self::BUDGET_CACHE_PREFIX . gmdate('YmdH'));
+
+        return is_string($raw) && $raw !== '' ? (int) $raw : 0;
+    }
+
+    private function recordSpend(int $count): void
+    {
+        if ($count <= 0 || $this->config->getWarmupHourlyBudget() <= 0) {
+            return;
+        }
+
+        $key = self::BUDGET_CACHE_PREFIX . gmdate('YmdH');
+
+        // Two drains in the same second can lose a count here. That is
+        // acceptable: this is a ceiling against runaway amplification, not
+        // an accounting ledger, and the drain itself is serialised by cron.
+        $this->cache->save(
+            (string) ($this->getSpentThisHour() + $count),
+            $key,
+            [self::CACHE_TAG],
+            7200
+        );
     }
 
     /**
@@ -100,10 +376,50 @@ class Warmup
      */
     public function queueUrl(string $url): void
     {
-        $url = trim($url);
-        if (!empty($url) && !in_array($url, $this->queue, true)) {
+        $url = $this->canonicalize($url);
+        if ($url !== '' && !in_array($url, $this->queue, true)) {
             $this->queue[] = $url;
         }
+    }
+
+    /**
+     * Reduce a URL to the single object the edge actually stores.
+     *
+     * Strips the fragment, which never reaches the server, and the store
+     * decoration parameters Magento adds when switching store views. Without
+     * this the same page is warmed several times over as different objects
+     * and the real one can still end up cold.
+     *
+     * @param  string $url
+     * @return string Empty when the URL is not usable.
+     */
+    private function canonicalize(string $url): string
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+
+        $parts = parse_url($url);
+        if ($parts === false || empty($parts['host']) || empty($parts['scheme'])) {
+            return '';
+        }
+
+        $query = '';
+        if (!empty($parts['query'])) {
+            parse_str($parts['query'], $params);
+            foreach (self::DECORATIVE_PARAMS as $drop) {
+                unset($params[$drop]);
+            }
+            if ($params !== []) {
+                ksort($params);
+                $query = '?' . http_build_query($params);
+            }
+        }
+
+        $port = isset($parts['port']) ? ':' . $parts['port'] : '';
+
+        return $parts['scheme'] . '://' . $parts['host'] . $port . ($parts['path'] ?? '/') . $query;
     }
 
     /**
@@ -125,8 +441,12 @@ class Warmup
      * as frontend URLs, not admin URLs. Handles CLI context gracefully
      * where emulation may not be available.
      */
-    public function scheduleCategories(): void
+    public function scheduleCategories(?array $categoryIds = null): void
     {
+        if ($categoryIds !== null && $categoryIds === []) {
+            return;
+        }
+
         $emulationStarted = false;
 
         try {
@@ -146,6 +466,12 @@ class Warmup
                 ->addUrlRewriteToResult()
                 ->addAttributeToSelect(['url_key', 'url_path'])
                 ->setPageSize(self::MAX_URLS_PER_BATCH);
+
+            // Warm only what was invalidated when we know which categories
+            // those were. Saving one product used to pull the whole tree.
+            if ($categoryIds !== null) {
+                $collection->addIdFilter($categoryIds);
+            }
 
             $baseUrl = $this->config->getBaseUrl();
 
@@ -226,39 +552,84 @@ class Warmup
             $sitemapUrl = $this->config->getBaseUrl() . '/sitemap.xml';
         }
 
-        try {
-            $client   = $this->clientFactory->create(['config' => ['timeout' => 15, 'verify' => $this->config->isWarmupSslVerify()]]);
-            $response = $client->request('GET', $sitemapUrl);
+        $xml = $this->fetchSitemapXml($sitemapUrl);
+        if ($xml === null) {
+            return;
+        }
 
-            if ($response->getStatusCode() === 200) {
-                $xml = @simplexml_load_string($response->getBody()->getContents());
-                if ($xml) {
-                    $count = 0;
-                    foreach ($xml->url as $url) {
-                        if ($count >= self::MAX_URLS_PER_BATCH) {
-                            break;
-                        }
-                        $loc = (string) $url->loc;
-                        if (!empty($loc)) {
-                            $this->queueUrl($loc);
-                            $count++;
-                        }
-                    }
-
-                    // Handle sitemap index files
-                    foreach ($xml->sitemap as $sitemap) {
-                        $loc = (string) $sitemap->loc;
-                        if (!empty($loc) && $count < self::MAX_URLS_PER_BATCH) {
-                            $this->parseSitemapFile($loc, $count);
-                        }
-                    }
-                }
+        $count = 0;
+        foreach ($xml->url as $url) {
+            if ($count >= self::MAX_URLS_PER_BATCH) {
+                break;
             }
+            $loc = (string) $url->loc;
+            if (!empty($loc)) {
+                $this->queueUrl($loc);
+                $count++;
+            }
+        }
+
+        // Handle sitemap index files
+        foreach ($xml->sitemap as $sitemap) {
+            $loc = (string) $sitemap->loc;
+            if (!empty($loc) && $count < self::MAX_URLS_PER_BATCH) {
+                $this->parseSitemapFile($loc, $count);
+            }
+        }
+    }
+
+    /**
+     * Read a sitemap over HTTP.
+     *
+     * This is the one request the warm-up still makes to the site, and it
+     * goes through the CDN like any other. If Bot Management is enabled it
+     * will be answered with 403, which used to leave the warm-up silently
+     * empty, so that case is named explicitly in the log.
+     *
+     * @param  string $url
+     * @return \SimpleXMLElement|null
+     */
+    private function fetchSitemapXml(string $url): ?\SimpleXMLElement
+    {
+        try {
+            $client = $this->clientFactory->create(['config' => [
+                'timeout'     => 15,
+                'http_errors' => false,
+                'verify'      => $this->config->isWarmupSslVerify(),
+                'headers'     => ['User-Agent' => 'TransparentEdge-Magento/' . Config::VERSION],
+            ]]);
+
+            $response = $client->request('GET', $url);
+            $status   = $response->getStatusCode();
+
+            if ($status === 403) {
+                $this->logger->warning(
+                    'TransparentEdge: the sitemap was refused with 403. Bot Management usually answers '
+                    . 'automated requests this way. Allow the origin IP for this path, or point the '
+                    . 'warm-up at an internal sitemap URL that does not go through the CDN.',
+                    ['url' => $url]
+                );
+                return null;
+            }
+
+            if ($status !== 200) {
+                $this->logger->warning('TransparentEdge: could not read the sitemap for warm-up', [
+                    'url'    => $url,
+                    'status' => $status,
+                ]);
+                return null;
+            }
+
+            $xml = @simplexml_load_string($response->getBody()->getContents());
+
+            return $xml === false ? null : $xml;
         } catch (GuzzleException $e) {
-            $this->logger->warning('TransparentEdge: Could not parse sitemap for warm-up', [
-                'url'   => $sitemapUrl,
+            $this->logger->warning('TransparentEdge: could not read the sitemap for warm-up', [
+                'url'   => $url,
                 'error' => $e->getMessage(),
             ]);
+
+            return null;
         }
     }
 
@@ -270,105 +641,115 @@ class Warmup
      */
     private function parseSitemapFile(string $sitemapUrl, int &$count): void
     {
-        try {
-            $client   = $this->clientFactory->create(['config' => ['timeout' => 15, 'verify' => $this->config->isWarmupSslVerify()]]);
-            $response = $client->request('GET', $sitemapUrl);
+        $xml = $this->fetchSitemapXml($sitemapUrl);
+        if ($xml === null) {
+            return;
+        }
 
-            if ($response->getStatusCode() === 200) {
-                $xml = @simplexml_load_string($response->getBody()->getContents());
-                if ($xml) {
-                    foreach ($xml->url as $url) {
-                        if ($count >= self::MAX_URLS_PER_BATCH) {
-                            return;
-                        }
-                        $loc = (string) $url->loc;
-                        if (!empty($loc)) {
-                            $this->queueUrl($loc);
-                            $count++;
-                        }
-                    }
-                }
+        foreach ($xml->url as $url) {
+            if ($count >= self::MAX_URLS_PER_BATCH) {
+                return;
             }
-        } catch (GuzzleException $e) {
-            $this->logger->warning('TransparentEdge: Could not parse sub-sitemap', [
-                'url'   => $sitemapUrl,
-                'error' => $e->getMessage(),
-            ]);
+            $loc = (string) $url->loc;
+            if (!empty($loc)) {
+                $this->queueUrl($loc);
+                $count++;
+            }
         }
     }
 
     /**
-     * Process the warm-up queue with rate limiting
+     * Hand the queue to the platform to warm.
      *
-     * Uses Guzzle's concurrent request pool for non-blocking execution.
+     * One API call per batch of URLs, each a soft invalidation with refetch.
+     * No HTTP request is made to the site itself, so the origin is not asked
+     * to render anything, every edge node is warmed rather than just one, and
+     * Bot Management is never involved.
      *
-     * @return array{total: int, success: int, failed: int}
+     * The whole run is a couple of HTTP POSTs, which is why it no longer
+     * matters that it is called from a shutdown handler.
+     *
+     * @return array{total: int, success: int, failed: int, calls: int}
      */
     public function processQueue(): array
     {
         if (empty($this->queue)) {
-            return ['total' => 0, 'success' => 0, 'failed' => 0];
+            return ['total' => 0, 'success' => 0, 'failed' => 0, 'calls' => 0];
         }
 
-        $urls = array_slice(array_unique($this->queue), 0, self::MAX_URLS_PER_BATCH);
+        $urls = array_slice(array_values(array_unique($this->queue)), 0, self::MAX_URLS_PER_BATCH);
         $this->queue = [];
 
-        $rateLimit  = $this->config->getWarmupRateLimit();
-        $concurrency = max(1, min($rateLimit, 5)); // Cap concurrency at 5
+        // The ceiling applies here, where URLs actually leave for the
+        // platform, so every source of warming is charged to the same hour:
+        // content edits, the CLI command and the periodic sweep alike.
+        $remaining = $this->getRemainingBudget();
+        $skipped   = 0;
+        if (count($urls) > $remaining) {
+            $skipped = count($urls) - $remaining;
+            $urls    = array_slice($urls, 0, $remaining);
+            $this->logger->warning('TransparentEdge: hourly warm-up budget reached, skipping URLs', [
+                'budget'  => $this->config->getWarmupHourlyBudget(),
+                'skipped' => $skipped,
+            ]);
+        }
 
-        $client = $this->clientFactory->create([
-            'config' => [
-                'timeout'         => 30,
-                'connect_timeout' => 10,
-                'http_errors'     => false,
-                'verify'          => $this->config->isWarmupSslVerify(),
-            ],
-        ]);
+        if ($urls === []) {
+            return ['total' => 0, 'success' => 0, 'failed' => 0, 'calls' => 0, 'skipped' => $skipped];
+        }
 
-        $requests = function () use ($urls) {
-            foreach ($urls as $url) {
-                yield new Request('GET', $url, [
-                    'User-Agent' => 'TransparentEdge-Warmup/1.0 (Magento)',
-                ]);
-            }
-        };
+        $this->recordSpend(count($urls));
+
+        $batches = array_chunk($urls, self::URLS_PER_API_CALL);
+
+        // Requests per second allowed against the API. Honoured between
+        // batches; a single batch never needs pacing.
+        $perSecond = max(1, $this->config->getWarmupRateLimit());
+        $gap       = (int) round(1000000 / $perSecond);
 
         $success = 0;
         $failed  = 0;
+        $calls   = 0;
 
-        $pool = new Pool($client, $requests(), [
-            'concurrency' => $concurrency,
-            'fulfilled'   => function ($response, $index) use (&$success, $urls) {
-                $success++;
+        foreach ($batches as $i => $batch) {
+            if ($i > 0) {
+                usleep($gap);
+            }
+
+            $result = $this->apiClient->warmUrls($batch);
+            $calls++;
+
+            if ($result['success']) {
+                $success += count($batch);
                 if ($this->config->shouldLog('debug')) {
-                    $this->logger->debug('TransparentEdge: Warm-up OK', [
-                        'url'    => $urls[$index] ?? 'unknown',
-                        'status' => $response->getStatusCode(),
+                    $this->logger->debug('TransparentEdge: Warm-up batch queued', [
+                        'count' => count($batch),
+                        'first' => $batch[0] ?? '',
                     ]);
                 }
-            },
-            'rejected' => function ($reason, $index) use (&$failed, $urls) {
-                $failed++;
-                $this->logger->warning('TransparentEdge: Warm-up failed', [
-                    'url'   => $urls[$index] ?? 'unknown',
-                    'error' => $reason->getMessage(),
+            } else {
+                $failed += count($batch);
+                $this->logger->warning('TransparentEdge: Warm-up batch failed', [
+                    'count'   => count($batch),
+                    'status'  => $result['status'] ?? 0,
+                    'message' => $result['message'] ?? '',
                 ]);
-            },
-        ]);
-
-        // Wait for all requests to complete
-        $pool->promise()->wait();
+            }
+        }
 
         $this->logger->info('TransparentEdge: Warm-up completed', [
             'total'   => count($urls),
             'success' => $success,
             'failed'  => $failed,
+            'calls'   => $calls,
         ]);
 
         return [
             'total'   => count($urls),
             'success' => $success,
             'failed'  => $failed,
+            'calls'   => $calls,
+            'skipped' => $skipped,
         ];
     }
 

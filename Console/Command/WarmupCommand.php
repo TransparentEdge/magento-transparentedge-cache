@@ -68,11 +68,26 @@ class WarmupCommand extends Command
         $result = $this->warmup->processQueue();
 
         $output->writeln(sprintf(
-            '<info>Warm-up completed: %d total, %d success, %d failed</info>',
+            '<info>Warm-up handed to the platform: %d URL(s) in %d API call(s), %d queued, %d failed</info>',
             $result['total'],
+            $result['calls'] ?? 0,
             $result['success'],
             $result['failed']
         ));
+
+        if (($result['skipped'] ?? 0) > 0) {
+            $output->writeln(sprintf(
+                '<comment>%d URL(s) skipped: the hourly warm-up budget for this hour is spent. '
+                . 'Raise it under Stores > Configuration > Transparent Edge CDN > Warm-up, or wait.</comment>',
+                $result['skipped']
+            ));
+        }
+
+        $output->writeln(
+            '<comment>Each URL is soft-invalidated with refetch, so every edge node re-fetches it '
+            . 'without going through this server. Budget for roughly one origin render per URL: the '
+            . 'refetchers collapse the fetches for a given page across nodes, not across pages.</comment>'
+        );
 
         return $result['failed'] > 0 ? Command::FAILURE : Command::SUCCESS;
     }

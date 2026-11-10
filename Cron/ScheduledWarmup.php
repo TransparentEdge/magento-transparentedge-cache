@@ -58,6 +58,16 @@ class ScheduledWarmup
             return;
         }
 
+        // Off by default. A sweep re-fetches every listed URL whether or not
+        // anyone wants it, which is one origin render per URL every six
+        // hours on top of whatever the edits already cost. Soft purge with
+        // stale-while-revalidate covers the same ground on demand, so this
+        // only earns its keep where traffic is uneven enough for pages to go
+        // cold between visits.
+        if (!$this->config->isScheduledWarmupEnabled()) {
+            return;
+        }
+
         $this->logger->info('TransparentEdge: Starting scheduled warm-up');
 
         $this->warmup->scheduleFullWarmup();

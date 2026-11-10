@@ -56,6 +56,13 @@
                 <sitemap_url/>
                 <rate_limit>3</rate_limit>
                 <custom_urls/>
+                <!--
+                    Periodic full sweep. Off: soft purge plus
+                    stale-while-revalidate already revalidates on demand.
+                -->
+                <scheduled>0</scheduled>
+                <!-- Ceiling on URLs warmed per clock hour, across all sources. -->
+                <hourly_budget>300</hourly_budget>
             </warmup>
             <i3>
                 <enabled>0</enabled>
