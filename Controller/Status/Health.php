@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace TransparentEdge\CDN\Controller\Status;
 
 use TransparentEdge\CDN\Model\Config;
+use TransparentEdge\CDN\Model\HeaderManager;
 use TransparentEdge\CDN\Model\Redis\RedisManager;
 use Magento\Framework\App\Action\HttpGetActionInterface;
 use Magento\Framework\Controller\ResultFactory;
@@ -30,12 +31,28 @@ class Health implements HttpGetActionInterface
         $result = $this->resultFactory->create(ResultFactory::TYPE_RAW);
         $result->setHeader('Content-Type', 'application/json', true);
         $result->setHeader('Cache-Control', 'no-cache, no-store', true);
+        // These headers are deliberate — keep HeaderManager off this response.
+        $result->setHeader(HeaderManager::HEADER_TE_OWN, '1', true);
 
-        $configuredToken = $this->config->getHealthToken();
-        $providedToken = $this->request->getParam('token', '');
+        $configuredToken = (string) $this->config->getHealthToken();
+        $providedToken   = (string) $this->request->getParam('token', '');
 
-        if (!empty($configuredToken) && $providedToken !== $configuredToken) {
-            $result->setContents(json_encode(['status' => $this->config->isConfigured() ? 'ok' : 'unconfigured']));
+        // Secure by default. Without a configured token this endpoint used to
+        // publish company_id, the exact module version and whether the object
+        // cache, the FPC and sessions run on Redis or on files — free
+        // reconnaissance on every install that never set a token. Now the
+        // detail requires a token; without one, only liveness is reported.
+        //
+        // hash_equals() compares in constant time: a plain !== leaks how many
+        // leading characters of the token were right.
+        $detailAllowed = $configuredToken !== ''
+            && $providedToken !== ''
+            && hash_equals($configuredToken, $providedToken);
+
+        if (!$detailAllowed) {
+            $result->setContents(json_encode([
+                'status' => $this->config->isConfigured() ? 'ok' : 'unconfigured',
+            ]));
             return $result;
         }
 

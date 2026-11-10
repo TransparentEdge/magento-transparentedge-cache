@@ -64,6 +64,24 @@ class HtmlOptimizer
      */
     public function optimize(HttpResponse $response): void
     {
+        try {
+            $this->optimizeInternal($response);
+        } catch (\Throwable $e) {
+            // Never let an HTML rewrite break the page, but never lose the
+            // reason either — this used to fail silently.
+            $this->logger->warning('TransparentEdge: HTML optimization failed', [
+                'exception' => get_class($e),
+                'error'     => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * @param  HttpResponse $response
+     * @return void
+     */
+    private function optimizeInternal(HttpResponse $response): void
+    {
         if (!$this->shouldOptimize($response)) {
             return;
         }
@@ -76,23 +94,29 @@ class HtmlOptimizer
         $originalLength = strlen($html);
 
         // Run optimizers in order
-        // 1. DNS Prefetch — inject hints early in <head>
-        if ($this->config->isWpoDnsPrefetchEnabled()) {
-            $html = $this->dnsPrefetchOptimizer->process($html);
+        // 1-3 are the WPO pipeline proper and follow the WPO master switch.
+        if ($this->config->isWpoEnabled()) {
+            // 1. DNS Prefetch — inject hints early in <head>
+            if ($this->config->isWpoDnsPrefetchEnabled()) {
+                $html = $this->dnsPrefetchOptimizer->process($html);
+            }
+
+            // 2. Preload critical resources — after DNS hints, before body
+            if ($this->config->isWpoPreloadEnabled()) {
+                $html = $this->preloadOptimizer->process($html);
+            }
+
+            // 3. Lazy load iframes/videos — process body content
+            if ($this->config->isWpoLazyLoadEnabled()) {
+                $html = $this->lazyLoadOptimizer->process($html);
+            }
         }
 
-        // 2. Preload critical resources — after DNS hints, before body
-        if ($this->config->isWpoPreloadEnabled()) {
-            $html = $this->preloadOptimizer->process($html);
-        }
-
-        // 3. Lazy load iframes/videos — process body content
-        if ($this->config->isWpoLazyLoadEnabled()) {
-            $html = $this->lazyLoadOptimizer->process($html);
-        }
-
-        // 4. Speculation Rules inline — contextual prerender/prefetch per page type
-        //    Runs independently of WPO settings (has its own enabled check)
+        // 4. Speculation Rules inline — contextual prerender/prefetch per page
+        //    type. This has its own enabled check and its own admin section, so
+        //    it must NOT depend on the WPO switch: turning WPO off used to
+        //    disable inline speculation silently, with nothing in the UI or the
+        //    log to say so.
         $html = $this->speculationInlineOptimizer->process($html);
 
         // Only update body if something changed
@@ -116,8 +140,23 @@ class HtmlOptimizer
      */
     private function shouldOptimize(HttpResponse $response): bool
     {
-        // Must be enabled
-        if (!$this->config->isEnabled() || !$this->config->isWpoEnabled()) {
+        // The module must be on, and at least one of the two things that
+        // rewrite HTML (the WPO pipeline, inline Speculation Rules) must be
+        // enabled. The WPO switch alone no longer gates the whole method.
+        if (!$this->config->isEnabled()) {
+            return false;
+        }
+
+        // SpeculationInlineOptimizer gates itself on isSpeculationEnabled()
+        // alone — the injection mode (php/vcl) only decides how the GLOBAL
+        // rules are delivered, not whether the contextual inline ones run.
+        if (!$this->config->isWpoEnabled() && !$this->config->isSpeculationEnabled()) {
+            return false;
+        }
+
+        // Never rewrite an error page or a redirect body
+        $status = (int) $response->getHttpResponseCode();
+        if ($status >= 300) {
             return false;
         }
 

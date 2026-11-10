@@ -360,6 +360,29 @@ class VclGenerator
         $l[] = '            set beresp.ttl = 60s;';
         $l[] = '        }';
 
+        // Every other error — never cached. Without this branch a 403, a 429
+        // or a 5xx falls through to Varnish's default TTL and gets pinned at
+        // the edge, so a transient origin failure keeps serving long after the
+        // origin recovered. stale-if-error still serves a previously good
+        // object: this only stops the error itself from becoming the object.
+        $l[] = '';
+        $l[] = '        # Any other error — never cache it';
+        $l[] = '        if (beresp.status >= 400 && beresp.status != 404) {';
+        $l[] = '            set beresp.http.Cache-Control = "no-cache, no-store, must-revalidate";';
+        $l[] = '            set beresp.ttl = 0s;';
+        $l[] = '            set beresp.uncacheable = true;';
+        $l[] = '        }';
+
+        // 3xx — follow the origin, never invent a TTL for a redirect
+        $l[] = '';
+        $l[] = '        # Redirects — only cache when the origin said so';
+        $l[] = '        if (beresp.status >= 300 && beresp.status < 400) {';
+        $l[] = '            if (beresp.http.Cache-Control !~ "s-maxage") {';
+        $l[] = '                set beresp.ttl = 0s;';
+        $l[] = '                set beresp.uncacheable = true;';
+        $l[] = '            }';
+        $l[] = '        }';
+
         $l[] = '    }';
         $l[] = '}';
         $l[] = '# END [' . $host . ' — Magento 2 backend response]';

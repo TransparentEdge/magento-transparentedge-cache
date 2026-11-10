@@ -17,6 +17,16 @@ namespace TransparentEdge\CDN\Model;
 class TagResolver
 {
     /**
+     * Maximum size of the Surrogate-Keys header value, in bytes.
+     *
+     * Varnish's default http_resp_hdr_len is 8192 bytes for the whole header
+     * line; 6144 leaves room for the header name and for everything else the
+     * response carries. Past this the key list degrades — see
+     * buildSurrogateKeyHeader().
+     */
+    public const MAX_HEADER_BYTES = 6144;
+
+    /**
      * Magento tag prefix → Surrogate-Key prefix mapping
      *
      * Magento tag format: {prefix}_{id}
@@ -33,9 +43,14 @@ class TagResolver
 
     /**
      * Tags that map to a global TE key (no ID suffix)
+     *
+     * Keys are lowercase on purpose: resolveTag() lowercases the incoming tag
+     * before looking it up. Magento's own full-page-cache tag is spelled FPC
+     * in uppercase, so an uppercase key here would never be found and the tag
+     * would fall through to the generic m2- prefix instead of te-fpc.
      */
     private const GLOBAL_TAG_MAP = [
-        'FPC'                       => 'te-fpc',
+        'fpc'                       => 'te-fpc',
         'cat_p'                     => 'te-products',
         'cat_c'                     => 'te-categories',
         'cms_p'                     => 'te-pages',
@@ -167,14 +182,16 @@ class TagResolver
             }
         }
 
+        // Store group tags — must be tested BEFORE the plain store_ prefix,
+        // which would otherwise swallow store_group_5 and turn it into
+        // store-group_5 (and leave this branch unreachable).
+        if (strpos($tag, 'store_group_') === 0) {
+            return 'store-group-' . substr($tag, 12);
+        }
+
         // Store-specific tags
         if (strpos($tag, 'store_') === 0) {
             return 'store-' . substr($tag, 6);
-        }
-
-        // Store group tags
-        if (strpos($tag, 'store_group_') === 0) {
-            return 'store-group-' . substr($tag, 12);
         }
 
         // For unrecognized tags: only pass through known Magento FPC-related tags.
@@ -207,7 +224,32 @@ class TagResolver
         $keys = array_unique($keys);
         sort($keys);
 
-        return implode(' ', $keys);
+        $header = implode(' ', $keys);
+
+        if (strlen($header) <= self::MAX_HEADER_BYTES) {
+            return $header;
+        }
+
+        // The header would not fit. A page showing every product of a large
+        // category (?product_list_limit=all) produces one key per product and
+        // crosses Varnish's default 8 KB header limit at roughly 600 of them.
+        //
+        // We degrade to the global keys instead of truncating the list:
+        // a truncated list would be a lie — the page would claim keys for the
+        // products that happened to fit and silently drop the rest, so
+        // invalidating one of the dropped products would leave this page
+        // stale forever. The global keys (te-products, te-categories, …) are
+        // coarser but still correct, and te-truncated makes the degradation
+        // visible in a curl.
+        $globals = array_values(array_filter(
+            $keys,
+            static fn(string $key): bool => strpos($key, 'te-') === 0
+        ));
+        $globals[] = 'te-truncated';
+        $globals = array_unique($globals);
+        sort($globals);
+
+        return implode(' ', $globals);
     }
 
     /**
