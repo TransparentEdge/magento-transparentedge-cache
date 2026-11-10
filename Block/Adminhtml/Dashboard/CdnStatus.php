@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace TransparentEdge\CDN\Block\Adminhtml\Dashboard;
 
 use TransparentEdge\CDN\Model\Config;
+use TransparentEdge\CDN\Model\Diagnostics;
 use TransparentEdge\CDN\Model\Redis\RedisManager;
 use Magento\Backend\Block\Template;
 use Magento\Backend\Block\Template\Context;
@@ -13,12 +14,38 @@ class CdnStatus extends Template
     protected $_template = 'TransparentEdge_CDN::dashboard/cdn_status.phtml';
     private Config $config;
     private RedisManager $redisManager;
+    private Diagnostics $diagnostics;
 
-    public function __construct(Context $context, Config $config, RedisManager $redisManager, array $data = [])
-    {
+    public function __construct(
+        Context $context,
+        Config $config,
+        RedisManager $redisManager,
+        Diagnostics $diagnostics,
+        array $data = []
+    ) {
         $this->config       = $config;
         $this->redisManager = $redisManager;
+        $this->diagnostics  = $diagnostics;
         parent::__construct($context, $data);
+    }
+
+    /**
+     * Findings that need the merchant to act. Empty when everything is fine.
+     *
+     * @return array<int, array{id:string, severity:string, title:string, detail:string, fix:string}>
+     */
+    public function getProblems(): array
+    {
+        if (!$this->config->isEnabled()) {
+            return [];
+        }
+
+        return $this->diagnostics->getProblems();
+    }
+
+    public function hasCriticalProblem(): bool
+    {
+        return $this->config->isEnabled() && $this->diagnostics->hasCriticalProblem();
     }
 
     public function isConfigured(): bool { return $this->config->isConfigured(); }

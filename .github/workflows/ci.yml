@@ -39,5 +39,11 @@ jobs:
       - name: Estructura del VCL generado
         run: php Test/Unit/vcl-structure.php
 
+      - name: Diagnostico del entorno
+        run: php Test/Unit/diagnostics.php
+
+      - name: Diagnostico del entorno
+        run: php Test/Unit/diagnostics.php
+
       - name: composer validate
         run: composer validate --no-check-publish --no-check-lock

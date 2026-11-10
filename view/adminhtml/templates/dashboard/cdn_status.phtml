@@ -3,17 +3,40 @@
 $configured = $block->isConfigured();
 $enabled = $block->isEnabled();
 $features = $block->getActiveFeatures();
+$problems = $block->getProblems();
+$hasCritical = $block->hasCriticalProblem();
 ?>
 <div style="background:#f8fafc;border:1px solid #E2E2E2;border-radius:8px;padding:20px;font-family:'Plus Jakarta Sans',-apple-system,sans-serif;margin-bottom:20px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <div style="display:flex;align-items:center;gap:10px;">
             <span style="font-size:16px;font-weight:700;color:#002643;">Transparent Edge CDN</span>
-            <span style="font-size:11px;padding:2px 8px;border-radius:10px;<?= $configured && $enabled ? 'background:#edfdf5;color:#0a6e3f;' : 'background:#fef2f2;color:#991b1b;' ?>">
-                <?= $configured && $enabled ? $block->escapeHtml(__('Connected')) : $block->escapeHtml(__('Not configured')) ?>
-            </span>
+            <?php if ($configured && $enabled && $hasCritical): ?>
+                <span style="font-size:11px;padding:2px 8px;border-radius:10px;background:#fef2f2;color:#991b1b;">
+                    <?= $block->escapeHtml(__('Connected, not caching')) ?>
+                </span>
+            <?php else: ?>
+                <span style="font-size:11px;padding:2px 8px;border-radius:10px;<?= $configured && $enabled ? 'background:#edfdf5;color:#0a6e3f;' : 'background:#fef2f2;color:#991b1b;' ?>">
+                    <?= $configured && $enabled ? $block->escapeHtml(__('Connected')) : $block->escapeHtml(__('Not configured')) ?>
+                </span>
+            <?php endif; ?>
         </div>
         <span style="font-size:11px;color:#718096;">Company <?= $block->escapeHtml($block->getCompanyId()) ?></span>
     </div>
+    <?php foreach ($problems as $problem): ?>
+        <?php $critical = $problem['severity'] === \TransparentEdge\CDN\Model\Diagnostics::SEVERITY_CRITICAL; ?>
+        <div style="margin-bottom:16px;padding:14px 16px;border-radius:6px;border-left:4px solid <?= $critical ? '#991b1b' : '#b45309' ?>;background:<?= $critical ? '#fef2f2' : '#fffbeb' ?>;">
+            <div style="font-size:13px;font-weight:700;color:<?= $critical ? '#991b1b' : '#92400e' ?>;margin-bottom:6px;">
+                <?= $critical ? '&#9888; ' : '' ?><?= $block->escapeHtml($problem['title']) ?>
+            </div>
+            <div style="font-size:12px;color:#4a5568;line-height:1.5;margin-bottom:<?= $problem['fix'] !== '' ? '10px' : '0' ?>;">
+                <?= $block->escapeHtml($problem['detail']) ?>
+            </div>
+            <?php if ($problem['fix'] !== ''): ?>
+                <div style="font-size:11px;color:#5a6a7e;margin-bottom:4px;"><?= $block->escapeHtml(__('Run this from the Magento root:')) ?></div>
+                <code style="display:block;font-size:11px;background:#002643;color:#9ae6b4;padding:8px 10px;border-radius:4px;overflow-x:auto;white-space:nowrap;"><?= $block->escapeHtml($problem['fix']) ?></code>
+            <?php endif; ?>
+        </div>
+    <?php endforeach; ?>
     <?php if ($configured && $enabled): ?>
         <div style="margin-bottom:16px;">
             <div style="font-size:12px;color:#5a6a7e;margin-bottom:6px;"><?= $block->escapeHtml(__('Active Features')) ?></div>

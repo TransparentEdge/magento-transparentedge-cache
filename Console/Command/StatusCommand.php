@@ -13,6 +13,7 @@ namespace TransparentEdge\CDN\Console\Command;
 
 use TransparentEdge\CDN\Api\ApiClient;
 use TransparentEdge\CDN\Model\Config;
+use TransparentEdge\CDN\Model\Diagnostics;
 use TransparentEdge\CDN\Model\VclGenerator;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -24,12 +25,18 @@ class StatusCommand extends Command
     private Config $config;
     private ApiClient $apiClient;
     private VclGenerator $vclGenerator;
+    private Diagnostics $diagnostics;
 
-    public function __construct(Config $config, ApiClient $apiClient, VclGenerator $vclGenerator)
-    {
+    public function __construct(
+        Config $config,
+        ApiClient $apiClient,
+        VclGenerator $vclGenerator,
+        Diagnostics $diagnostics
+    ) {
         $this->config       = $config;
         $this->apiClient    = $apiClient;
         $this->vclGenerator = $vclGenerator;
+        $this->diagnostics  = $diagnostics;
         parent::__construct();
     }
 
@@ -47,6 +54,24 @@ class StatusCommand extends Command
         $output->writeln('<info>  Transparent Edge CDN — Magento 2 Plugin v' . Config::VERSION . '</info>');
         $output->writeln('<info>═══════════════════════════════════════════════════════</info>');
         $output->writeln('');
+
+        // Environment checks first: a setting outside this module can stop the
+        // CDN caching anything at all, and everything below would still look
+        // perfectly healthy. Lead with the bad news.
+        $problems = $this->config->isEnabled() ? $this->diagnostics->getProblems() : [];
+        if ($problems !== []) {
+            $this->printSection($output, 'Problems found');
+            foreach ($problems as $problem) {
+                $isCritical = $problem['severity'] === Diagnostics::SEVERITY_CRITICAL;
+                $output->writeln(($isCritical ? '  <e>✗ ' : '  <comment>! ') . $problem['title']
+                    . ($isCritical ? '</e>' : '</comment>'));
+                $output->writeln('    ' . wordwrap($problem['detail'], 70, "\n    ", false));
+                if ($problem['fix'] !== '') {
+                    $output->writeln('    <info>' . $problem['fix'] . '</info>');
+                }
+                $output->writeln('');
+            }
+        }
 
         // General
         $this->printSection($output, 'General');

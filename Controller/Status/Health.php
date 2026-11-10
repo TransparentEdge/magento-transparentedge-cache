@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace TransparentEdge\CDN\Controller\Status;
 
 use TransparentEdge\CDN\Model\Config;
+use TransparentEdge\CDN\Model\Diagnostics;
 use TransparentEdge\CDN\Model\HeaderManager;
 use TransparentEdge\CDN\Model\Redis\RedisManager;
 use Magento\Framework\App\Action\HttpGetActionInterface;
@@ -17,13 +18,20 @@ class Health implements HttpGetActionInterface
     private RedisManager $redisManager;
     private ResultFactory $resultFactory;
     private RequestInterface $request;
+    private Diagnostics $diagnostics;
 
-    public function __construct(Config $config, RedisManager $redisManager, ResultFactory $resultFactory, RequestInterface $request)
-    {
+    public function __construct(
+        Config $config,
+        RedisManager $redisManager,
+        ResultFactory $resultFactory,
+        RequestInterface $request,
+        Diagnostics $diagnostics
+    ) {
         $this->config        = $config;
         $this->redisManager  = $redisManager;
         $this->resultFactory = $resultFactory;
         $this->request       = $request;
+        $this->diagnostics   = $diagnostics;
     }
 
     public function execute()
@@ -70,6 +78,26 @@ class Health implements HttpGetActionInterface
             'log_level'         => $this->config->getLogLevel(),
             'timestamp'         => date('c'),
         ];
+
+        // Surface the environment checks here too: a merchant debugging "the
+        // CDN is not caching" reaches for this endpoint before the admin panel.
+        $problems = $this->diagnostics->getProblems();
+        $health['diagnostics'] = [
+            'ok'       => $problems === [],
+            'problems' => array_map(
+                static fn(array $p): array => [
+                    'id'       => $p['id'],
+                    'severity' => $p['severity'],
+                    'title'    => $p['title'],
+                    'fix'      => $p['fix'],
+                ],
+                $problems
+            ),
+        ];
+
+        if ($this->diagnostics->hasCriticalProblem()) {
+            $health['status'] = 'degraded';
+        }
 
         $result->setContents(json_encode($health, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
         return $result;

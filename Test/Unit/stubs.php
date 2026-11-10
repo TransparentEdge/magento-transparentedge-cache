@@ -74,6 +74,37 @@ namespace Magento\Framework\App {
     }
 }
 
+namespace Magento\Framework\App\Config {
+    interface ScopeConfigInterface
+    {
+        public function getValue($path, $scopeType = 'default', $scopeCode = null);
+        public function isSetFlag($path, $scopeType = 'default', $scopeCode = null);
+    }
+}
+
+namespace Magento\Framework\App\Cache {
+    interface StateInterface
+    {
+        public function isEnabled($cacheType);
+        public function setEnabled($cacheType, $isEnabled);
+        public function persist();
+    }
+}
+
+namespace {
+    // Magento's translation helper. Diagnostics builds its messages with it,
+    // so the harness needs a stand-in that just returns the interpolated text.
+    if (!function_exists('__')) {
+        function __($text, ...$args)
+        {
+            foreach ($args as $i => $arg) {
+                $text = str_replace('%' . ($i + 1), (string) $arg, $text);
+            }
+            return $text;
+        }
+    }
+}
+
 namespace Psr\Log {
     interface LoggerInterface
     {
