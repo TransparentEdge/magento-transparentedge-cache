@@ -138,6 +138,21 @@ namespace {
     $check('catalogsearch ya no se bypasea',
         strpos($vcl, 'catalogsearch') === false,
         'las paginas de busqueda son cacheables; bypasearlas regalaba offload');
+    $check('sin vary-protocol',
+        strpos($vcl, 'vary-protocol') === false,
+        'el bloque acaba en redirect_https: la variante http no se puede llenar nunca');
+
+    echo "\n=== fragmentacion de cache ===\n";
+    // te-i3.md: la negociacion auto webp/avif la hace el EDGE y cada
+    // transform es ya un objeto de cache distinto. Un Vary: Accept no
+    // habilita nada y parte cada imagen por la cadena Accept del visitante,
+    // que difiere entre navegadores y entre versiones del mismo navegador.
+    $check('sin Vary: Accept en las imagenes i3',
+        preg_match('/set\s+beresp\.http\.Vary\s*=\s*"Accept"/', $vcl) === 0,
+        'fragmenta cada imagen por la cadena Accept, en el CDN y en el navegador');
+    $check('el VCL no fija ningun Vary',
+        preg_match('/set\s+beresp\.http\.Vary/', $vcl) === 0,
+        'el Vary lo decide el origen; el edge varia por X-Vary-TCDN');
 
     echo "\n=== bypass que SI mantenemos, a proposito ===\n";
     $check('cookie de admin', strpos($vcl, TransparentEdge\CDN\Model\Config::ADMIN_COOKIE_NAME) !== false);

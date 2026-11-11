@@ -288,6 +288,58 @@ $latido = json_decode((string) $cache2->load($clave), true);
 check('un drenado en vacio tambien sella: prueba que el cron vive',
     is_array($latido) && isset($latido['at']), (string) $cache2->load($clave));
 
+echo "\n=== solo se calientan URLs de la propia tienda ===\n";
+// Una URL de precalentado se le entrega a la plataforma como
+// invalidacion+refetch: un host ajeno seria pedirle al CDN que vaya a
+// buscar el sitio de otro.
+[$w] = warmup();
+foreach ([
+    'https://evil.test/a.html',
+    'http://169.254.169.254/latest/meta-data/',
+    'https://t.test.evil.test/b.html',
+    'https://T.TEST/c.html',          // el nuestro, en mayusculas
+    'https://t.test/d.html',
+] as $u) {
+    $w->queueUrl($u);
+}
+check('se descartan los hosts ajenos', $w->getQueueSize() === 2, json_encode($w->getQueue()));
+check('el host propio se acepta sin importar las mayusculas',
+    in_array('https://T.TEST/c.html', $w->getQueue(), true), json_encode($w->getQueue()));
+
+// ──────────────────────────────────────────────
+// Lock de concurrencia del drenado
+// ──────────────────────────────────────────────
+
+echo "\n=== dos drenados a la vez no se pisan ===\n";
+// El precalentado salio del request y se fue a un cron de 5 minutos. Si un
+// drenado dura mas que su ciclo, el siguiente tick arrancaria otro: los dos
+// leerian la misma cola y los dos la mandarian.
+$cache = new \TransparentEdge\CDN\Test\FakeCache();
+[$w1] = warmup(3, $cache);
+$w1->defer(['https://t.test/e1.html', 'https://t.test/e2.html']);
+
+// Simular un drenado en curso: el lock puesto y no liberado.
+$ref = new ReflectionClass(Warmup::class);
+$claveLock = $ref->getConstant('DRAIN_LOCK_KEY');
+$cache->save('1', $claveLock);
+
+[$w2, $api2] = warmup(3, $cache);
+$r = $w2->drainDeferred();
+check('el segundo drenado se retira', ($r['locked'] ?? false) === true, json_encode($r));
+check('y no llama al API', $api2->llamadas === [], (string) count($api2->llamadas));
+check('la cola sigue intacta para el siguiente ciclo', $w2->getDeferredSize() === 2,
+    (string) $w2->getDeferredSize());
+$latido = $cache->load(\TransparentEdge\CDN\Model\Diagnostics::WARMUP_HEARTBEAT_KEY);
+check('un drenado bloqueado NO sella latido', $latido === false,
+    'si sellara, un cron atascado pareceria sano');
+
+// Liberado el lock, el siguiente drenado hace su trabajo.
+$cache->remove($claveLock);
+[$w3, $api3] = warmup(3, $cache);
+$r = $w3->drainDeferred();
+check('liberado el lock, se drena', $r['total'] === 2, json_encode($r));
+check('y el lock queda liberado al terminar', $cache->load($claveLock) === false);
+
 // ──────────────────────────────────────────────
 // Lo que decide dirigido vs masivo
 // ──────────────────────────────────────────────

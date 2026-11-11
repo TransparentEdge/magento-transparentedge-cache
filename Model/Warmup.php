@@ -91,6 +91,22 @@ class Warmup
     private const HEARTBEAT_TTL = 86400;
 
     /**
+     * Lock held while a drain is in flight.
+     *
+     * Moving the warm-up out of the request and into a cron every five
+     * minutes fixed the amplification, but opened a new way to cause one: if
+     * a drain outlives its cycle — a slow API, a big queue, a backed-up cron
+     * — the next tick starts a second drain, both read the same queue and
+     * both send it. The lock makes a drain wait its turn instead.
+     *
+     * The TTL is the safety net: if the process dies mid-drain without
+     * releasing, warming resumes by itself one cycle later.
+     */
+    private const DRAIN_LOCK_KEY = 'te_cdn_warmup_drain_lock';
+
+    private const DRAIN_LOCK_TTL = 600;
+
+    /**
      * Hard ceiling on the deferred queue, so a bulk import cannot grow it
      * without bound between two drains.
      */
@@ -153,6 +169,13 @@ class Warmup
      * @var CacheInterface
      */
     private CacheInterface $cache;
+
+    /**
+     * Host allowlist, resolved once per request.
+     *
+     * @var array<string>|null
+     */
+    private ?array $ownHosts = null;
 
     /**
      * @param Config                    $config
@@ -251,24 +274,42 @@ class Warmup
      */
     public function drainDeferred(): array
     {
-        $pending = $this->loadDeferred();
-        if ($pending === []) {
-            // Still a heartbeat: an idle drain proves the cron is alive.
-            $this->recordDrain(0, 0);
+        $vacio = ['total' => 0, 'success' => 0, 'failed' => 0, 'calls' => 0, 'skipped' => 0];
 
-            return ['total' => 0, 'success' => 0, 'failed' => 0, 'calls' => 0, 'skipped' => 0];
+        if ($this->cache->load(self::DRAIN_LOCK_KEY)) {
+            // Another drain is still running. Leave the queue alone — the
+            // next tick picks it up — and do NOT stamp the heartbeat: a
+            // drain that did nothing is not proof the cron is healthy.
+            $this->logger->info('TransparentEdge: warm-up drain already in progress, skipping this run');
+
+            return $vacio + ['locked' => true];
         }
 
-        // Clear first. A drain that dies mid-flight must not leave the queue
-        // behind to be retried for ever against an origin already in trouble.
-        $this->cache->remove(self::DEFERRED_CACHE_KEY);
+        $this->cache->save('1', self::DRAIN_LOCK_KEY, [self::CACHE_TAG], self::DRAIN_LOCK_TTL);
 
-        $this->queueUrls(array_keys($pending));
+        try {
+            $pending = $this->loadDeferred();
+            if ($pending === []) {
+                // Still a heartbeat: an idle drain proves the cron is alive.
+                $this->recordDrain(0, 0);
 
-        $result = $this->processQueue();
-        $this->recordDrain(count($pending), $result['total']);
+                return $vacio;
+            }
 
-        return $result;
+            // Clear first. A drain that dies mid-flight must not leave the
+            // queue behind to be retried for ever against an origin already
+            // in trouble.
+            $this->cache->remove(self::DEFERRED_CACHE_KEY);
+
+            $this->queueUrls(array_keys($pending));
+
+            $result = $this->processQueue();
+            $this->recordDrain(count($pending), $result['total']);
+
+            return $result;
+        } finally {
+            $this->cache->remove(self::DRAIN_LOCK_KEY);
+        }
     }
 
     /**
@@ -405,6 +446,22 @@ class Warmup
             return '';
         }
 
+        // Only ever warm our own hosts.
+        //
+        // A warm-up URL is handed to the platform as an invalidate+refetch,
+        // so a foreign host here would have us asking the CDN to go and
+        // fetch somebody else's site. Nothing in the module composes these
+        // URLs from user input today, but the custom-URLs setting and the
+        // sitemap are both free text, and this is the kind of hole that is
+        // cheap to close now and expensive to discover later.
+        if (!in_array(strtolower($parts['host']), $this->getOwnHosts(), true)) {
+            $this->logger->warning('TransparentEdge: refusing to warm a URL outside this store', [
+                'host' => $parts['host'],
+            ]);
+
+            return '';
+        }
+
         $query = '';
         if (!empty($parts['query'])) {
             parse_str($parts['query'], $params);
@@ -420,6 +477,45 @@ class Warmup
         $port = isset($parts['port']) ? ':' . $parts['port'] : '';
 
         return $parts['scheme'] . '://' . $parts['host'] . $port . ($parts['path'] ?? '/') . $query;
+    }
+
+    /**
+     * Hosts this installation serves, lower-cased.
+     *
+     * Every store view, not just the default one: on a multi-store setup the
+     * category URLs come back on each store's own domain, and warming them
+     * is legitimate.
+     *
+     * @return array<string>
+     */
+    private function getOwnHosts(): array
+    {
+        if ($this->ownHosts !== null) {
+            return $this->ownHosts;
+        }
+
+        $hosts = [];
+        foreach ([$this->config->getBaseUrl()] as $url) {
+            $h = parse_url((string) $url, PHP_URL_HOST);
+            if (is_string($h) && $h !== '') {
+                $hosts[] = strtolower($h);
+            }
+        }
+
+        try {
+            foreach ($this->storeManager->getStores() as $store) {
+                $h = parse_url((string) $store->getBaseUrl(), PHP_URL_HOST);
+                if (is_string($h) && $h !== '') {
+                    $hosts[] = strtolower($h);
+                }
+            }
+        } catch (\Exception $e) {
+            // Store list unavailable (CLI edge cases): the configured base
+            // URL alone still gives us a usable allowlist.
+            $this->logger->debug('TransparentEdge: could not list store hosts: ' . $e->getMessage());
+        }
+
+        return $this->ownHosts = array_values(array_unique(array_filter($hosts)));
     }
 
     /**

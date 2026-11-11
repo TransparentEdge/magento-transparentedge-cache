@@ -191,7 +191,10 @@ class VclGenerator
 
         // Vary protocol
         $l[] = '';
-        $l[] = '        set req.http.TCDN-Command = "vary-protocol, " + req.http.TCDN-Command;';
+        // No vary-protocol. The block ends in redirect_https, so every object
+        // that reaches the cache was fetched over https and the http variant
+        // can never be populated. Asking the edge to key on protocol buys a
+        // second bucket that nothing will ever fill.
 
         // Collapse cookies and clean URL
         $l[] = '';
@@ -366,11 +369,15 @@ class VclGenerator
         // i3 — Vary: Accept for content negotiation
         if ($this->config->isI3Enabled()) {
             $l[] = '';
-            $l[] = '            # i3 images — Vary for content negotiation (WebP/AVIF)';
-            $l[] = '            if (bereq.url ~ "^/media/catalog/(product|category)/" ||';
-            $l[] = '                    bereq.url ~ "^/media/wysiwyg/") {';
-            $l[] = '                set beresp.http.Vary = "Accept";';
-            $l[] = '            }';
+            // No Vary: Accept on i3 images.
+            //
+            // The WebP/AVIF negotiation happens inside the edge, which keys
+            // each transform as its own cache object. Adding Vary: Accept
+            // does not enable that negotiation — it is already on — it just
+            // splits every image by the visitor's full Accept string, and
+            // those strings differ between browsers and between versions of
+            // the same browser. The header also reaches the browser, so the
+            // same split happens again in each visitor's own cache.
         }
 
         $l[] = '        }';  // end beresp.status < 300
