@@ -278,12 +278,15 @@ class Diagnostics
             return [
                 'id'       => 'warmup_cron',
                 'severity' => self::SEVERITY_WARNING,
-                'title'    => (string) __('Warm-up has never run'),
+                'title'    => (string) __('No sign of the warm-up cron yet'),
                 'detail'   => (string) __(
-                    'Warming is handed to a cron job that runs every five minutes, and it has not run '
-                    . 'once yet. On a site installed minutes ago that is expected. Otherwise Magento '
-                    . 'cron is not running and nothing is being warmed — silently, because a warm-up '
-                    . 'that never happens produces no error.'
+                    'Warming is handed to a cron job that runs every five minutes, and there is no '
+                    . 'record of it running. Two ordinary reasons come before worrying: the site was '
+                    . 'installed minutes ago, or the cache was flushed — this record lives in the '
+                    . 'Magento cache, so bin/magento cache:flush and a deployment both clear it, and '
+                    . 'the next cron run puts it back. If it is still saying this more than five '
+                    . 'minutes after a flush, Magento cron is not running and nothing is being warmed '
+                    . '— silently, because a warm-up that never happens produces no error.'
                 ),
                 'fix'      => $fix,
             ];

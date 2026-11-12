@@ -146,6 +146,12 @@ foreach ($d->run() as $c) {
 // ──────────────────────────────────────────────
 
 echo "\n=== el cron del precalentado nunca ha corrido ===\n";
+// Ojo: el latido vive en la cache de Magento, asi que un cache:flush lo
+// borra y este aviso sale solo despues de cada despliegue. El texto tiene
+// que decirlo, o enseñamos a ignorarlo.
+$c0 = find(build(2, true, true, 'nunca')->run(), 'warmup_cron');
+check('el texto menciona el vaciado de cache',
+    str_contains($c0['detail'], 'cache:flush'), 'un aviso previsible que no se explica se ignora');
 $c = find(build(2, true, true, 'nunca')->run(), 'warmup_cron');
 check('aparece el chequeo', $c !== null);
 check('es un aviso, no critico', $c['severity'] === Diagnostics::SEVERITY_WARNING, $c['severity'] ?? '');
