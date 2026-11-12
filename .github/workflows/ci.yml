@@ -57,5 +57,8 @@ jobs:
       - name: Conflictos de speculation rules
         run: php Test/Unit/speculation-conflict.php
 
+      - name: Huella del codigo desplegado
+        run: php Test/Unit/fingerprint.php
+
       - name: composer validate
         run: composer validate --no-check-publish --no-check-lock

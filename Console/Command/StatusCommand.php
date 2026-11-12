@@ -14,6 +14,7 @@ namespace TransparentEdge\CDN\Console\Command;
 use TransparentEdge\CDN\Api\ApiClient;
 use TransparentEdge\CDN\Model\Config;
 use TransparentEdge\CDN\Model\Diagnostics;
+use TransparentEdge\CDN\Model\Fingerprint;
 use TransparentEdge\CDN\Model\VclGenerator;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -52,6 +53,20 @@ class StatusCommand extends Command
         $output->writeln('');
         $output->writeln('<info>═══════════════════════════════════════════════════════</info>');
         $output->writeln('<info>  Transparent Edge CDN — Magento 2 Plugin v' . Config::VERSION . '</info>');
+
+        // Which code is actually deployed.
+        //
+        // Config::VERSION says what the source claims to be, which is not the
+        // same question: it only changes at release, so every commit between
+        // two releases reports the same version. Twice in one day we deployed
+        // a tree that was not the one we thought, and di:compile passed both
+        // times because old code compiles fine.
+        //
+        // Run php -r on the repo with the same class to compare.
+        $huella = Fingerprint::of(dirname(__DIR__, 2));
+        if ($huella !== '') {
+            $output->writeln('<info>  Código desplegado: ' . $huella . '</info>');
+        }
         $output->writeln('<info>═══════════════════════════════════════════════════════</info>');
         $output->writeln('');
 
