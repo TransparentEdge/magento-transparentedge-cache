@@ -474,6 +474,120 @@
             </group>
 
             <!-- ═══════════════════════════════════════════ -->
+            <!-- ═══════════════════════════════════════════ -->
+            <!-- Security headers                           -->
+            <!-- ═══════════════════════════════════════════ -->
+            <group id="security" translate="label comment" type="text" sortOrder="45"
+                   showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Security Headers</label>
+                <comment><![CDATA[Written into the VCL the plugin generates, not sent from PHP, so they also cover static files, images and error pages — none of which reach Magento. After changing anything here, regenerate the VCL and redeploy it.]]></comment>
+
+                <field id="nosniff" translate="label comment" type="select" sortOrder="10"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>X-Content-Type-Options: nosniff</label>
+                    <comment><![CDATA[Stops the browser guessing a file's type from its content. Safe to leave on.]]></comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/security/nosniff</config_path>
+                </field>
+
+                <field id="frame_options" translate="label" type="select" sortOrder="20"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>X-Frame-Options</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/security/frame_options</config_path>
+                </field>
+                <field id="frame_options_value" translate="label comment" type="text" sortOrder="21"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>X-Frame-Options value</label>
+                    <comment><![CDATA[SAMEORIGIN or DENY. Use DENY only if nothing embeds the storefront in a frame.]]></comment>
+                    <config_path>transparentedge/security/frame_options_value</config_path>
+                    <depends><field id="frame_options">1</field></depends>
+                </field>
+
+                <field id="referrer_policy" translate="label" type="select" sortOrder="30"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Referrer-Policy</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/security/referrer_policy</config_path>
+                </field>
+                <field id="referrer_policy_value" translate="label" type="text" sortOrder="31"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Referrer-Policy value</label>
+                    <config_path>transparentedge/security/referrer_policy_value</config_path>
+                    <depends><field id="referrer_policy">1</field></depends>
+                </field>
+
+                <field id="permissions_policy" translate="label comment" type="select" sortOrder="40"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Permissions-Policy</label>
+                    <comment><![CDATA[Off by default: this one has to match what your store actually uses. A generic policy can switch off payment or geolocation APIs that a module needs.]]></comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/security/permissions_policy</config_path>
+                </field>
+                <field id="permissions_policy_value" translate="label" type="text" sortOrder="41"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Permissions-Policy value</label>
+                    <config_path>transparentedge/security/permissions_policy_value</config_path>
+                    <depends><field id="permissions_policy">1</field></depends>
+                </field>
+
+                <field id="hsts" translate="label comment" type="select" sortOrder="50"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Strict-Transport-Security (HSTS)</label>
+                    <comment><![CDATA[<strong>Off by default, and think before switching it on.</strong> Once a browser has seen this header it refuses to talk http to your domain for the whole max-age, and there is no way to call it back. If any part of the site, or any subdomain when you include them, is still served over http, it stops being reachable for visitors who have already been here.<br/><br/>Turn it on only when every part of the site is on https and you intend to keep it that way.]]></comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/security/hsts</config_path>
+                </field>
+                <field id="hsts_max_age" translate="label comment" type="text" sortOrder="51"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>HSTS max-age (seconds)</label>
+                    <comment><![CDATA[Default 31536000 (one year). Start lower — 86400 — until you are sure, because this is how long a mistake lasts.]]></comment>
+                    <validate>validate-digits</validate>
+                    <config_path>transparentedge/security/hsts_max_age</config_path>
+                    <depends><field id="hsts">1</field></depends>
+                </field>
+                <field id="hsts_subdomains" translate="label comment" type="select" sortOrder="52"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>HSTS: include subdomains</label>
+                    <comment><![CDATA[Applies the same rule to every subdomain, including ones you may have forgotten.]]></comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/security/hsts_subdomains</config_path>
+                    <depends><field id="hsts">1</field></depends>
+                </field>
+                <field id="hsts_preload" translate="label comment" type="select" sortOrder="53"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>HSTS: preload</label>
+                    <comment><![CDATA[Asks browser vendors to ship the rule built in, so it applies even on a first visit. Getting back off the preload list takes months. Only has any effect with subdomains included, which the submission process requires.]]></comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/security/hsts_preload</config_path>
+                    <depends><field id="hsts">1</field><field id="hsts_subdomains">1</field></depends>
+                </field>
+
+                <field id="csp" translate="label comment" type="select" sortOrder="60"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Content-Security-Policy</label>
+                    <comment><![CDATA[Off by default. A policy that is slightly wrong takes the storefront's JavaScript down.]]></comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/security/csp</config_path>
+                </field>
+                <field id="csp_value" translate="label comment" type="textarea" sortOrder="61"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>CSP policy</label>
+                    <comment><![CDATA[The full policy, e.g. <em>default-src 'self'; img-src 'self' data: https:</em>]]></comment>
+                    <config_path>transparentedge/security/csp_value</config_path>
+                    <depends><field id="csp">1</field></depends>
+                </field>
+                <field id="csp_enforce" translate="label comment" type="select" sortOrder="62"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enforce the CSP</label>
+                    <comment><![CDATA[No (the default) sends it as Content-Security-Policy-Report-Only: browsers report what the policy would have blocked and block nothing. Run it that way, read the reports, and only switch to Yes once nothing legitimate is being reported.]]></comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/security/csp_enforce</config_path>
+                    <depends><field id="csp">1</field></depends>
+                </field>
+            </group>
+
+            <!-- ═══════════════════════════════════════════ -->
             <!-- Speculation Rules                          -->
             <!-- ═══════════════════════════════════════════ -->
             <group id="speculation" translate="label comment" type="text" sortOrder="46"

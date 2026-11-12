@@ -188,6 +188,9 @@ namespace TransparentEdge\CDN\Model {
         public bool $scheduledWarmup = false;
         public int $hourlyBudget = 300;
         public function isScheduledWarmupEnabled(): bool { return $this->scheduledWarmup; }
+        /** @var array<string,string> */
+        public array $securityHeaders = [];
+        public function getSecurityHeaders(): array { return $this->securityHeaders; }
         public function getWarmupHourlyBudget(): int { return max(0, $this->hourlyBudget); }
         public function getWarmupSitemapUrl(): string { return ''; }
         public function getWarmupCustomUrls(): array { return []; }

@@ -51,5 +51,8 @@ jobs:
       - name: Precalentado
         run: php Test/Unit/warmup.php
 
+      - name: Cabeceras de seguridad
+        run: php Test/Unit/security-headers.php
+
       - name: composer validate
         run: composer validate --no-check-publish --no-check-lock

@@ -460,6 +460,23 @@ class VclGenerator
         $l[] = '        unset resp.http.Surrogate-Keys;';
         $l[] = '        unset resp.http.X-Magento-Tags;';
         $l[] = '';
+        $seguridad = $this->config->getSecurityHeaders();
+        if ($seguridad !== []) {
+            $l[] = '';
+            $l[] = '        # Security headers. They live here rather than in PHP so they also';
+            $l[] = '        # cover static files, images and error pages, none of which reach';
+            $l[] = '        # Magento. Switch each one on under Stores > Configuration >';
+            $l[] = '        # Transparent Edge CDN > Security.';
+            $l[] = '        #';
+            $l[] = '        # If your VCL already sets any of these by hand, remove the hand';
+            $l[] = '        # written copy: setting the same header twice is harmless but the';
+            $l[] = '        # two will drift apart.';
+            foreach ($seguridad as $nombre => $valor) {
+                $l[] = sprintf('        set resp.http.%s = "%s";', $nombre, str_replace('"', '\\"', $valor));
+            }
+        }
+
+        $l[] = '';
         $l[] = '        # X-TE-Debug and X-TE-Page-Type are deliberately NOT stripped. They';
         $l[] = '        # only exist while debug mode is on, and the whole point of debug';
         $l[] = '        # mode is to read them from outside — at the edge, which is where';

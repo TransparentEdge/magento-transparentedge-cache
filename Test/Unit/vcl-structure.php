@@ -33,6 +33,9 @@ namespace TransparentEdge\CDN\Model {
         public function isSpeculationEnabled(): bool { return true; }
         public function getSpeculationInjection(): string { return 'vcl'; }
         public function getSpeculationRulesUrl(): string { return 'https://tienda.test/transparentedge/speculationRules/index'; }
+        /** @var array<string,string> */
+        public static array $seguridad = [];
+        public function getSecurityHeaders(): array { return self::$seguridad; }
     }
 }
 
@@ -193,6 +196,42 @@ namespace {
         ['vcl_recv', 'vcl_backend_fetch', 'vcl_backend_response', 'vcl_deliver']);
     $check('todas las subrutinas son de la plataforma', $invalidasSub === [],
         implode(', ', $invalidasSub));
+
+    echo "\n=== cabeceras de seguridad: apagadas no ensucian el VCL ===\n";
+    $check('sin cabeceras no hay bloque de seguridad',
+        strpos($vcl, '# Security headers') === false);
+
+    echo "\n=== encendidas, salen en el deliver ===\n";
+    \TransparentEdge\CDN\Model\Config::$seguridad = [
+        'X-Content-Type-Options' => 'nosniff',
+        'Referrer-Policy'        => 'strict-origin-when-cross-origin',
+    ];
+    $vcl2 = (new TransparentEdge\CDN\Model\VclGenerator(new TransparentEdge\CDN\Model\Config()))->generateFull();
+    $check('nosniff', strpos($vcl2, 'set resp.http.X-Content-Type-Options = "nosniff";') !== false);
+    $check('Referrer-Policy',
+        strpos($vcl2, 'set resp.http.Referrer-Policy = "strict-origin-when-cross-origin";') !== false);
+    // Tienen que ir en el deliver, no en recv ni en backend_response.
+    $iDel = strpos($vcl2, 'Magento 2 deliver');
+    $iSec = strpos($vcl2, 'set resp.http.X-Content-Type-Options');
+    $check('van dentro del bloque deliver', $iDel !== false && $iSec !== false && $iSec > $iDel);
+
+    echo "\n=== las comillas del valor no rompen el VCL ===\n";
+    // Una CSP lleva comillas simples, pero un valor con comillas dobles
+    // cerraria la cadena VCL y dejaria una config invalida desplegada.
+    \TransparentEdge\CDN\Model\Config::$seguridad = [
+        'Content-Security-Policy-Report-Only' => "default-src 'self'; script-src \"unsafe-inline\"",
+    ];
+    $vcl3 = (new TransparentEdge\CDN\Model\VclGenerator(new TransparentEdge\CDN\Model\Config()))->generateFull();
+    $check('la comilla doble se escapa', strpos($vcl3, '\\"unsafe-inline\\"') !== false);
+    // Y el VCL sigue teniendo las comillas emparejadas en esa linea.
+    foreach (explode("\n", $vcl3) as $linea) {
+        if (strpos($linea, 'Content-Security-Policy-Report-Only') !== false) {
+            $sinEscapar = preg_replace('/\\\\"/', '', $linea);
+            $check('comillas emparejadas en la linea generada',
+                substr_count($sinEscapar, '"') % 2 === 0, trim($linea));
+        }
+    }
+    \TransparentEdge\CDN\Model\Config::$seguridad = [];
 
     echo "\n";
     printf("RESULTADO: %d correctas, %d fallos\n", $pass, $fail);

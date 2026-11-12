@@ -62,6 +62,7 @@ class Config
     public const WARMUP_SITEMAP_URL    = 'transparentedge/warmup/sitemap_url';
     public const WARMUP_RATE_LIMIT     = 'transparentedge/warmup/rate_limit';
     public const WARMUP_CUSTOM_URLS    = 'transparentedge/warmup/custom_urls';
+    public const SECURITY_PATH         = 'transparentedge/security/';
     public const WARMUP_SCHEDULED      = 'transparentedge/warmup/scheduled';
     public const WARMUP_HOURLY_BUDGET  = 'transparentedge/warmup/hourly_budget';
 
@@ -254,6 +255,68 @@ class Config
      * sweep only earns its cost on a site with very uneven traffic, where a
      * page can go cold between visits, so it is opt-in.
      */
+    /**
+     * The security headers to write into the generated vcl_deliver.
+     *
+     * Built here rather than in VclGenerator so the admin panel and the VCL
+     * always agree about what is switched on.
+     *
+     * @return array<string,string> header name => value, in the order sent
+     */
+    public function getSecurityHeaders(): array
+    {
+        $on  = function (string $k): bool {
+            return $this->scopeConfig->isSetFlag(self::SECURITY_PATH . $k, ScopeInterface::SCOPE_STORE);
+        };
+        $val = function (string $k, string $def = ''): string {
+            $v = $this->scopeConfig->getValue(self::SECURITY_PATH . $k, ScopeInterface::SCOPE_STORE);
+
+            return $v === null || $v === '' ? $def : trim((string) $v);
+        };
+
+        $h = [];
+
+        if ($on('nosniff')) {
+            $h['X-Content-Type-Options'] = 'nosniff';
+        }
+        if ($on('frame_options')) {
+            $h['X-Frame-Options'] = $val('frame_options_value', 'SAMEORIGIN');
+        }
+        if ($on('referrer_policy')) {
+            $h['Referrer-Policy'] = $val('referrer_policy_value', 'strict-origin-when-cross-origin');
+        }
+        if ($on('permissions_policy')) {
+            $v = $val('permissions_policy_value');
+            if ($v !== '') {
+                $h['Permissions-Policy'] = $v;
+            }
+        }
+        if ($on('hsts')) {
+            $max = (int) $val('hsts_max_age', '31536000');
+            $v   = 'max-age=' . max(0, $max);
+            if ($on('hsts_subdomains')) {
+                $v .= '; includeSubDomains';
+            }
+            // preload only means anything alongside includeSubDomains, and
+            // the submission process rejects it without one.
+            if ($on('hsts_preload') && $on('hsts_subdomains')) {
+                $v .= '; preload';
+            }
+            $h['Strict-Transport-Security'] = $v;
+        }
+        if ($on('csp')) {
+            $v = $val('csp_value');
+            if ($v !== '') {
+                // Report-Only unless someone deliberately asked to enforce:
+                // a policy that is slightly wrong takes the storefront's
+                // JavaScript down, and in report mode it only fills a log.
+                $h[$on('csp_enforce') ? 'Content-Security-Policy' : 'Content-Security-Policy-Report-Only'] = $v;
+            }
+        }
+
+        return $h;
+    }
+
     public function isScheduledWarmupEnabled(): bool
     {
         return $this->scopeConfig->isSetFlag(self::WARMUP_SCHEDULED, ScopeInterface::SCOPE_STORE);

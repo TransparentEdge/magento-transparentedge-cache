@@ -84,6 +84,42 @@
                 <lazyload>1</lazyload>
                 <dns_prefetch>1</dns_prefetch>
             </wpo>
+            <!--
+                Cabeceras de seguridad que se escriben en el vcl_deliver
+                generado. Van en el edge y no en PHP para que cubran tambien
+                los estaticos, que no pasan por Magento.
+
+                Los valores por defecto son los que no pueden romper un sitio
+                al activarlos. Los que si pueden van apagados a proposito:
+
+                  hsts: una vez enviado, el navegador se niega a hablar http
+                  con el dominio durante max_age. Si algo del sitio o de un
+                  subdominio sigue en http, deja de ser accesible, y no se
+                  puede deshacer a tiempo. Es una decision del cliente.
+
+                  csp: una politica mal ajustada deja la tienda sin
+                  JavaScript. Por eso ademas, al activarla, sale en modo
+                  Report-Only salvo que se pida lo contrario expresamente.
+
+                  permissions_policy: hay que adaptarla a lo que use cada
+                  tienda (pagos, geolocalizacion); una generica estorba.
+            -->
+            <security>
+                <nosniff>1</nosniff>
+                <frame_options>1</frame_options>
+                <frame_options_value>SAMEORIGIN</frame_options_value>
+                <referrer_policy>1</referrer_policy>
+                <referrer_policy_value>strict-origin-when-cross-origin</referrer_policy_value>
+                <hsts>0</hsts>
+                <hsts_max_age>31536000</hsts_max_age>
+                <hsts_subdomains>0</hsts_subdomains>
+                <hsts_preload>0</hsts_preload>
+                <permissions_policy>0</permissions_policy>
+                <permissions_policy_value>geolocation=(), microphone=(), camera=()</permissions_policy_value>
+                <csp>0</csp>
+                <csp_enforce>0</csp_enforce>
+                <csp_value/>
+            </security>
             <speculation>
                 <enabled>0</enabled>
                 <mode>conservative</mode>
