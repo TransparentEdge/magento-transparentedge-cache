@@ -3,7 +3,9 @@ declare(strict_types=1);
 
 namespace TransparentEdge\CDN\Model\Optimizer;
 
+use Magento\Framework\App\CacheInterface;
 use TransparentEdge\CDN\Model\Config;
+use TransparentEdge\CDN\Model\Diagnostics;
 use TransparentEdge\CDN\Model\SpeculationRules\ExclusionCollector;
 use Psr\Log\LoggerInterface;
 
@@ -18,16 +20,39 @@ class SpeculationInlineOptimizer
     private ExclusionCollector $exclusionCollector;
     private LoggerInterface $logger;
 
-    public function __construct(Config $config, ExclusionCollector $exclusionCollector, LoggerInterface $logger)
-    {
+    /**
+     * @var CacheInterface
+     */
+    private CacheInterface $cache;
+
+    public function __construct(
+        Config             $config,
+        ExclusionCollector $exclusionCollector,
+        LoggerInterface    $logger,
+        CacheInterface     $cache
+    ) {
         $this->config             = $config;
         $this->exclusionCollector = $exclusionCollector;
         $this->logger             = $logger;
+        $this->cache              = $cache;
     }
 
     public function process(string $html): string
     {
         if (!$this->config->isSpeculationEnabled()) {
+            return $html;
+        }
+
+        // Somebody else is already telling the browser what to prefetch.
+        // Adding ours on top does not override theirs — the browser merges
+        // every rule set on the page — so the visitor ends up fetching both
+        // lists. That is bandwidth on their connection and requests against
+        // the origin for pages nobody asked for, and the two sets will
+        // disagree about what to exclude.
+        $conflicto = $this->detectConflict($html);
+        if ($conflicto !== null) {
+            $this->recordConflict($conflicto);
+
             return $html;
         }
 
@@ -62,6 +87,77 @@ class SpeculationInlineOptimizer
         }
 
         return $html;
+    }
+
+    /**
+     * Known prefetch libraries, by the name they appear under in a script.
+     *
+     * Detected by behaviour rather than by a list of module names: the
+     * WordPress plugin can check a list of known plugins because it can read
+     * the active-plugin list, and the names there are stable. There is no
+     * equivalent list for Magento that could be written without guessing, so
+     * this looks at what the page actually does. These are real libraries,
+     * each of which prefetches links on its own.
+     */
+    private const KNOWN_PREFETCHERS = ['quicklink', 'instant.page', 'instantpage', 'flying-pages'];
+
+    /**
+     * What, if anything, is already speculating on this page.
+     *
+     * @return string|null Human-readable name of the conflict, or null.
+     */
+    private function detectConflict(string $html): ?string
+    {
+        // Our own marker: the page came through here already, or the edge
+        // injected the rules. Not a conflict with a third party.
+        if (strpos($html, 'TE CDN: Contextual Speculation Rules') !== false) {
+            return null;
+        }
+
+        if (preg_match('/<script[^>]+type\s*=\s*["\']speculationrules["\']/i', $html) === 1) {
+            return 'another speculationrules script';
+        }
+
+        foreach (self::KNOWN_PREFETCHERS as $nombre) {
+            // Only inside a script tag: the word could appear in page copy.
+            $patron = '/<script[^>]*(?:src\s*=\s*["\'][^"\']*' . preg_quote($nombre, '/') . '|[^>]*>[^<]{0,2000}'
+                . preg_quote($nombre, '/') . ')/i';
+            if (preg_match($patron, $html) === 1) {
+                return $nombre;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Leave the finding where Diagnostics can report it.
+     *
+     * Same shape as the cache-blocker probe: written from real traffic, read
+     * by the admin panel, /health and the CLI. Rate-limited the same way, so
+     * a busy storefront does not write on every render.
+     */
+    private function recordConflict(string $que): void
+    {
+        try {
+            $previo = $this->cache->load(Diagnostics::SPECULATION_CONFLICT_KEY);
+            $previo = is_string($previo) && $previo !== '' ? json_decode($previo, true) : null;
+
+            if (is_array($previo)
+                && ($previo['what'] ?? null) === $que
+                && (time() - (int) ($previo['at'] ?? 0)) < 3600) {
+                return;
+            }
+
+            $this->cache->save(
+                (string) json_encode(['at' => time(), 'what' => $que]),
+                Diagnostics::SPECULATION_CONFLICT_KEY,
+                ['TE_CDN_DIAGNOSTICS'],
+                172800
+            );
+        } catch (\Exception $e) {
+            $this->logger->debug('TransparentEdge: could not record speculation conflict: ' . $e->getMessage());
+        }
     }
 
     private function detectPageType(string $html): ?string

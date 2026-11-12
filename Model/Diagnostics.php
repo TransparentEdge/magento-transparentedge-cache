@@ -81,6 +81,12 @@ class Diagnostics
      */
     public const CACHE_BLOCKERS_STALE_AFTER = 86400;
 
+    /**
+     * Something else on the page is already telling the browser what to
+     * prefetch. Written by the speculation optimizer when it steps aside.
+     */
+    public const SPECULATION_CONFLICT_KEY = 'te_cdn_speculation_conflict';
+
     private const PATH_CACHING_APPLICATION = 'system/full_page_cache/caching_application';
     private const PATH_FPC_TTL             = 'system/full_page_cache/ttl';
 
@@ -116,6 +122,7 @@ class Diagnostics
             $this->checkCachingApplication(),
             $this->checkWarmupCron(),
             $this->checkCacheBlockers(),
+            $this->checkSpeculationConflict(),
         ];
 
         return array_values(array_filter($checks));
@@ -380,6 +387,61 @@ class Diagnostics
             ),
             'fix'      => '',
         ];
+    }
+
+    /**
+     * Is something else on the page already prefetching?
+     *
+     * The browser merges every speculation rule set it finds, so a second
+     * one does not replace ours — both lists get fetched. The plugin steps
+     * aside when it sees one, which keeps the page honest but means the
+     * exclusions we would have applied are not being applied by anyone.
+     *
+     * @return array|null Null when nothing was found.
+     */
+    private function checkSpeculationConflict(): ?array
+    {
+        if (!$this->config->isSpeculationEnabled()) {
+            return null;
+        }
+
+        $r = $this->loadJson(self::SPECULATION_CONFLICT_KEY);
+        $que = (string) ($r['what'] ?? '');
+        if ($que === '' || (time() - (int) ($r['at'] ?? 0)) > self::CACHE_BLOCKERS_STALE_AFTER) {
+            return null;
+        }
+
+        return [
+            'id'       => 'speculation_conflict',
+            'severity' => self::SEVERITY_WARNING,
+            'title'    => (string) __('Something else is prefetching: %1', $que),
+            'detail'   => (string) __(
+                'A page was rendered with %1 already on it, so the plugin did not add its own '
+                . 'speculation rules. Browsers merge every rule set on a page rather than picking one, '
+                . 'so adding ours would have made visitors fetch both lists. Leaving it alone is the '
+                . 'safe thing to do, but the other one does not know which URLs must never be '
+                . 'prefetched — cart, checkout, customer pages — so those may be getting fetched in '
+                . 'the background. Pick one: switch the other one off to use the plugin, or switch '
+                . 'speculation off here.',
+                $que
+            ),
+            'fix'      => 'bin/magento config:set transparentedge/speculation/enabled 0',
+        ];
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function loadJson(string $clave): array
+    {
+        $raw = $this->cache->load($clave);
+        if (!is_string($raw) || $raw === '') {
+            return [];
+        }
+
+        $decoded = json_decode($raw, true);
+
+        return is_array($decoded) ? $decoded : [];
     }
 
     /**

@@ -50,11 +50,13 @@ function build(
     // suponer las pruebas que no van de esto. 'nunca' = sin latido.
     array|string $latido = 'fresco',
     bool   $warmupEnabled = true,
-    ?array $sonda = null
+    ?array $sonda = null,
+    ?array $conflicto = null
 ): Diagnostics {
     $cfg = new \TransparentEdge\CDN\Model\Config();
     $cfg->enabled = $moduleEnabled;
     $cfg->warmupEnabled = $warmupEnabled;
+    $cfg->speculation   = true;
     $valores = ['system/full_page_cache/ttl' => 86400];
     if ($cachingApplication !== null) {
         $valores['system/full_page_cache/caching_application'] = $cachingApplication;
@@ -69,6 +71,10 @@ function build(
     if ($sonda !== null) {
         $sonda += ['at' => time()];
         $cache->save((string) json_encode($sonda), Diagnostics::CACHE_BLOCKERS_KEY);
+    }
+    if ($conflicto !== null) {
+        $conflicto += ['at' => time()];
+        $cache->save((string) json_encode($conflicto), Diagnostics::SPECULATION_CONFLICT_KEY);
     }
     return new Diagnostics(
         new FakeScopeConfig($valores),
@@ -206,6 +212,26 @@ echo "\n=== una lectura vieja no habla del sitio de hoy ===\n";
 $viejo = ['cookies' => ['PHPSESSID'], 'vary' => '', 'at' => time() - Diagnostics::CACHE_BLOCKERS_STALE_AFTER - 60];
 check('se descarta', find(build(2, true, true, 'fresco', true, $viejo)->run(), 'cache_blockers') === null,
     'un fallo de hace dos dias no es un fallo de ahora');
+
+// ──────────────────────────────────────────────
+// Conflicto de speculation rules
+// ──────────────────────────────────────────────
+
+echo "\n=== sin conflicto, no se opina ===\n";
+check('no aparece', find(build(2)->run(), 'speculation_conflict') === null);
+
+echo "\n=== con conflicto, avisa y dice de quien ===\n";
+$c = find(build(2, true, true, 'fresco', true, null, ['what' => 'quicklink'])->run(), 'speculation_conflict');
+check('es aviso', $c['severity'] === Diagnostics::SEVERITY_WARNING, $c['severity'] ?? '');
+check('nombra al culpable', str_contains($c['title'], 'quicklink'), $c['title'] ?? '');
+check('explica lo de las exclusiones', str_contains($c['detail'], 'checkout'), '');
+check('no es critico: la tienda funciona',
+    build(2, true, true, 'fresco', true, null, ['what' => 'quicklink'])->hasCriticalProblem() === false);
+
+echo "\n=== una lectura vieja no cuenta ===\n";
+$viejo = ['what' => 'quicklink', 'at' => time() - Diagnostics::CACHE_BLOCKERS_STALE_AFTER - 60];
+check('se descarta',
+    find(build(2, true, true, 'fresco', true, null, $viejo)->run(), 'speculation_conflict') === null);
 
 echo "\n";
 printf("RESULTADO: %d correctas, %d fallos\n", $pass, $fail);

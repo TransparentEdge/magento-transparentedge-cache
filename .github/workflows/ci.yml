@@ -54,5 +54,8 @@ jobs:
       - name: Cabeceras de seguridad
         run: php Test/Unit/security-headers.php
 
+      - name: Conflictos de speculation rules
+        run: php Test/Unit/speculation-conflict.php
+
       - name: composer validate
         run: composer validate --no-check-publish --no-check-lock

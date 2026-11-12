@@ -120,6 +120,8 @@
             <argument name="config" xsi:type="object">TransparentEdge\CDN\Model\Config</argument>
             <argument name="exclusionCollector" xsi:type="object">TransparentEdge\CDN\Model\SpeculationRules\ExclusionCollector</argument>
             <argument name="logger" xsi:type="object">TransparentEdge\CDN\Model\Logger</argument>
+            <!-- Deja el conflicto detectado donde Diagnostics lo lee. -->
+            <argument name="cache" xsi:type="object">Magento\Framework\App\CacheInterface</argument>
         </arguments>
     </type>
 
