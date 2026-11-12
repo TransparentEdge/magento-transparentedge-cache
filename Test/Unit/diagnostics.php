@@ -49,7 +49,8 @@ function build(
     // 'fresco' = el cron acaba de correr, que es lo normal y lo que deben
     // suponer las pruebas que no van de esto. 'nunca' = sin latido.
     array|string $latido = 'fresco',
-    bool   $warmupEnabled = true
+    bool   $warmupEnabled = true,
+    ?array $sonda = null
 ): Diagnostics {
     $cfg = new \TransparentEdge\CDN\Model\Config();
     $cfg->enabled = $moduleEnabled;
@@ -64,6 +65,10 @@ function build(
     }
     if (is_array($latido)) {
         $cache->save((string) json_encode($latido), Diagnostics::WARMUP_HEARTBEAT_KEY);
+    }
+    if ($sonda !== null) {
+        $sonda += ['at' => time()];
+        $cache->save((string) json_encode($sonda), Diagnostics::CACHE_BLOCKERS_KEY);
     }
     return new Diagnostics(
         new FakeScopeConfig($valores),
@@ -166,6 +171,41 @@ check('no sale en la lista de problemas',
 echo "\n=== sin precalentado no se comprueba ===\n";
 check('el chequeo desaparece',
     find(build(2, true, true, 'nunca', false)->run(), 'warmup_cron') === null);
+
+// ──────────────────────────────────────────────
+// La sonda de lo que impide cachear
+// ──────────────────────────────────────────────
+
+echo "\n=== sin lectura, no se opina ===\n";
+check('el chequeo no aparece', find(build(2)->run(), 'cache_blockers') === null,
+    'sin datos no se inventa un veredicto');
+
+echo "\n=== una cookie en una pagina cacheable es critico ===\n";
+$c = find(build(2, true, true, 'fresco', true, ['cookies' => ['PHPSESSID'], 'vary' => 'Accept-Encoding'])->run(), 'cache_blockers');
+check('es critico', $c['severity'] === Diagnostics::SEVERITY_CRITICAL, $c['severity'] ?? '');
+check('nombra la cookie', str_contains($c['detail'], 'PHPSESSID'), $c['detail'] ?? '');
+check('y tumba el estado general',
+    build(2, true, true, 'fresco', true, ['cookies' => ['PHPSESSID'], 'vary' => ''])->hasCriticalProblem() === true);
+
+echo "\n=== variar por Cookie es un aviso, no un critico ===\n";
+// El objeto SI se cachea; lo que pasa es que se guarda una copia por
+// visitante y casi nunca se reutiliza. Es grave, pero no es lo mismo.
+$c = find(build(2, true, true, 'fresco', true, ['cookies' => [], 'vary' => 'Accept-Encoding, Cookie'])->run(), 'cache_blockers');
+check('es aviso', $c['severity'] === Diagnostics::SEVERITY_WARNING, $c['severity'] ?? '');
+check('nombra Cookie', str_contains($c['title'], 'Cookie'), $c['title'] ?? '');
+$c = find(build(2, true, true, 'fresco', true, ['cookies' => [], 'vary' => 'User-Agent'])->run(), 'cache_blockers');
+check('tambien User-Agent', $c['severity'] === Diagnostics::SEVERITY_WARNING, $c['severity'] ?? '');
+
+echo "\n=== un Vary normal no da la alarma ===\n";
+$c = find(build(2, true, true, 'fresco', true, ['cookies' => [], 'vary' => 'Accept-Encoding, X-Vary-TCDN'])->run(), 'cache_blockers');
+check('OK', $c['severity'] === Diagnostics::SEVERITY_OK, $c['severity'] ?? '');
+check('no sale en la lista de problemas',
+    find(build(2, true, true, 'fresco', true, ['cookies' => [], 'vary' => 'Accept-Encoding'])->getProblems(), 'cache_blockers') === null);
+
+echo "\n=== una lectura vieja no habla del sitio de hoy ===\n";
+$viejo = ['cookies' => ['PHPSESSID'], 'vary' => '', 'at' => time() - Diagnostics::CACHE_BLOCKERS_STALE_AFTER - 60];
+check('se descarta', find(build(2, true, true, 'fresco', true, $viejo)->run(), 'cache_blockers') === null,
+    'un fallo de hace dos dias no es un fallo de ahora');
 
 echo "\n";
 printf("RESULTADO: %d correctas, %d fallos\n", $pass, $fail);

@@ -60,6 +60,27 @@ class Diagnostics
      */
     public const WARMUP_HEARTBEAT_STALE_AFTER = 900;
 
+    /**
+     * What a cacheable response was actually carrying when it left the origin.
+     *
+     * Written by HeaderManager from real traffic — no synthetic request, no
+     * HTTP call out and back, which on a site with Bot Management would be
+     * answered with a 403 anyway.
+     *
+     * This exists because of how long the last one took to find. The plugin
+     * was emitting correct public headers and the edge was caching nothing:
+     * every response carried a Set-Cookie, and a response with Set-Cookie is
+     * never cached. Everything looked right from Magento's side, and the only
+     * way to see it was to read the headers on the wire. Now the origin
+     * notices by itself.
+     */
+    public const CACHE_BLOCKERS_KEY = 'te_cdn_cache_blockers';
+
+    /**
+     * A reading older than this says nothing about the site as it is now.
+     */
+    public const CACHE_BLOCKERS_STALE_AFTER = 86400;
+
     private const PATH_CACHING_APPLICATION = 'system/full_page_cache/caching_application';
     private const PATH_FPC_TTL             = 'system/full_page_cache/ttl';
 
@@ -94,6 +115,7 @@ class Diagnostics
             $this->checkFullPageCacheEnabled(),
             $this->checkCachingApplication(),
             $this->checkWarmupCron(),
+            $this->checkCacheBlockers(),
         ];
 
         return array_values(array_filter($checks));
@@ -279,6 +301,98 @@ class Diagnostics
             ),
             'fix'      => '',
         ];
+    }
+
+    /**
+     * Is anything on a cacheable response stopping the edge from caching it?
+     *
+     * Two things do it silently, and both look fine from inside Magento:
+     *
+     *   Set-Cookie — a response that carries one is never cached. Magento
+     *   hands a PHPSESSID to anonymous visitors too, so without the VCL
+     *   stripping it on cacheable HTML the whole site goes uncached.
+     *
+     *   Vary on Cookie or User-Agent — the object is cached, but keyed on a
+     *   value that is different for almost every visitor, so it is never
+     *   served twice. Magento emits a safe Vary by itself; a third-party
+     *   module appending to it is the way this shows up.
+     *
+     * @return array|null Null when there is no reading to report on.
+     */
+    private function checkCacheBlockers(): ?array
+    {
+        $r = $this->loadCacheBlockers();
+        if ($r === [] || (time() - (int) ($r['at'] ?? 0)) > self::CACHE_BLOCKERS_STALE_AFTER) {
+            return null;
+        }
+
+        $cookies = array_filter(array_map('strval', (array) ($r['cookies'] ?? [])));
+        $vary    = (string) ($r['vary'] ?? '');
+        $varyMal = array_values(array_filter(
+            array_map('trim', explode(',', $vary)),
+            static function ($t) {
+                return in_array(strtolower($t), ['cookie', 'user-agent'], true);
+            }
+        ));
+
+        if ($cookies !== []) {
+            return [
+                'id'       => 'cache_blockers',
+                'severity' => self::SEVERITY_CRITICAL,
+                'title'    => (string) __('Cacheable pages are sending cookies, so nothing is cached'),
+                'detail'   => (string) __(
+                    'A page that should be cached left this server with a Set-Cookie for %1. The CDN '
+                    . 'never stores a response that sets a cookie, so every visitor is served from here '
+                    . 'instead of from the edge — silently, because the page itself is correct. The VCL '
+                    . 'the plugin generates strips these on cacheable responses; this usually means the '
+                    . 'deployed VCL predates that, or was edited.',
+                    implode(', ', $cookies)
+                ),
+                'fix'      => 'bin/magento transparentedge:status --vcl   # regenerate and redeploy the VCL',
+            ];
+        }
+
+        if ($varyMal !== []) {
+            return [
+                'id'       => 'cache_blockers',
+                'severity' => self::SEVERITY_WARNING,
+                'title'    => (string) __('Cacheable pages vary on %1', implode(', ', $varyMal)),
+                'detail'   => (string) __(
+                    'The response carries Vary: %1. The edge stores the page, but keyed on a value that '
+                    . 'differs for nearly every visitor, so a stored copy is almost never reused. Magento '
+                    . 'sends a safe Vary on its own, so something else is adding to it — usually a '
+                    . 'third-party module.',
+                    $vary
+                ),
+                'fix'      => '',
+            ];
+        }
+
+        return [
+            'id'       => 'cache_blockers',
+            'severity' => self::SEVERITY_OK,
+            'title'    => (string) __('Cacheable pages leave clean'),
+            'detail'   => (string) __(
+                'Last cacheable page sent from here carried no Set-Cookie and varied only on %1.',
+                $vary !== '' ? $vary : (string) __('nothing')
+            ),
+            'fix'      => '',
+        ];
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function loadCacheBlockers(): array
+    {
+        $raw = $this->cache->load(self::CACHE_BLOCKERS_KEY);
+        if (!is_string($raw) || $raw === '') {
+            return [];
+        }
+
+        $decoded = json_decode($raw, true);
+
+        return is_array($decoded) ? $decoded : [];
     }
 
     /**

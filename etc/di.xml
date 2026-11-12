@@ -42,6 +42,8 @@
             <argument name="tagResolver" xsi:type="object">TransparentEdge\CDN\Model\TagResolver</argument>
             <argument name="request" xsi:type="object">Magento\Framework\App\RequestInterface</argument>
             <argument name="logger" xsi:type="object">TransparentEdge\CDN\Model\Logger</argument>
+            <!-- Guarda la lectura de la sonda de cabeceras para Diagnostics. -->
+            <argument name="cache" xsi:type="object">Magento\Framework\App\CacheInterface</argument>
         </arguments>
     </type>
 

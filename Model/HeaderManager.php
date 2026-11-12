@@ -15,6 +15,7 @@ declare(strict_types=1);
 
 namespace TransparentEdge\CDN\Model;
 
+use Magento\Framework\App\CacheInterface;
 use Magento\Framework\App\Response\Http as HttpResponse;
 use Magento\Framework\App\RequestInterface;
 use Psr\Log\LoggerInterface;
@@ -47,6 +48,13 @@ class HeaderManager
      * would make the plugin stop setting TTLs on ordinary pages.
      */
     public const HEADER_TE_OWN = 'X-TE-Own-Headers';
+
+    /**
+     * How long a cache-blocker reading stays in the cache. Longer than the
+     * window Diagnostics trusts it for, so a stale one is reported as stale
+     * rather than disappearing and looking like it was never taken.
+     */
+    private const CACHE_BLOCKERS_TTL = 172800;
 
     /**
      * Static file extensions that should get static TTLs
@@ -82,6 +90,11 @@ class HeaderManager
     private CacheProfile $cacheProfile;
 
     /**
+     * @var CacheInterface
+     */
+    private CacheInterface $cache;
+
+    /**
      * @param Config           $config
      * @param TagResolver      $tagResolver
      * @param RequestInterface $request
@@ -93,13 +106,15 @@ class HeaderManager
         TagResolver      $tagResolver,
         RequestInterface $request,
         LoggerInterface  $logger,
-        CacheProfile     $cacheProfile
+        CacheProfile     $cacheProfile,
+        CacheInterface   $cache
     ) {
         $this->config       = $config;
         $this->tagResolver  = $tagResolver;
         $this->request      = $request;
         $this->logger       = $logger;
         $this->cacheProfile = $cacheProfile;
+        $this->cache        = $cache;
     }
 
     /**
@@ -167,6 +182,10 @@ class HeaderManager
 
         // Apply Cache-Control header
         $this->applyCacheControlHeader($response);
+
+        // We have just declared this response cacheable. Look at what it is
+        // actually carrying before it leaves.
+        $this->probeCacheBlockers($response);
 
         // Debug header
         if ($this->config->isDebugMode()) {
@@ -275,6 +294,85 @@ class HeaderManager
      *
      * @param HttpResponse $response
      */
+    /**
+     * Record what a cacheable response is carrying, for Diagnostics to read.
+     *
+     * Looks at PHP's own outgoing header list, not just the response object.
+     * That is the whole point: Magento's session cookie is written with
+     * setcookie() by the session manager, so it never appears in
+     * $response->getHeader('Set-Cookie'). A probe that only asked the
+     * response object would have reported everything clean while the site
+     * cached nothing — exactly the blind spot this is here to remove.
+     *
+     * Cookie NAMES only. A session id is a credential; storing one in a
+     * diagnostics record that is shown in the admin and on a public health
+     * endpoint would be handing it out.
+     */
+    private function probeCacheBlockers(HttpResponse $response): void
+    {
+        try {
+            $cookies = [];
+            $vary    = '';
+
+            if (function_exists('headers_list')) {
+                foreach (headers_list() as $linea) {
+                    $p = strpos($linea, ':');
+                    if ($p === false) {
+                        continue;
+                    }
+                    $nombre = strtolower(trim(substr($linea, 0, $p)));
+                    $valor  = trim(substr($linea, $p + 1));
+
+                    if ($nombre === 'set-cookie') {
+                        $eq = strpos($valor, '=');
+                        $cookies[] = $eq === false ? $valor : substr($valor, 0, $eq);
+                    } elseif ($nombre === 'vary') {
+                        $vary = $valor;
+                    }
+                }
+            }
+
+            // The response object may carry its own, set by Magento or by a
+            // module, and those are not in headers_list() yet.
+            $v = $response->getHeader('Vary');
+            if ($v && $vary === '') {
+                $vary = (string) $v->getFieldValue();
+            }
+            $sc = $response->getHeader('Set-Cookie');
+            if ($sc) {
+                $valor = (string) $sc->getFieldValue();
+                $eq = strpos($valor, '=');
+                $cookies[] = $eq === false ? $valor : substr($valor, 0, $eq);
+            }
+
+            $cookies = array_values(array_unique(array_filter($cookies)));
+
+            // One cache write per request would cost more than the reading is
+            // worth. Write when the picture changes, and otherwise refresh it
+            // at most once an hour so a stale reading never speaks for a site
+            // that has since been fixed.
+            $previo = $this->cache->load(Diagnostics::CACHE_BLOCKERS_KEY);
+            $previo = is_string($previo) && $previo !== '' ? json_decode($previo, true) : null;
+            $igual  = is_array($previo)
+                && ($previo['cookies'] ?? null) === $cookies
+                && ($previo['vary'] ?? null) === $vary;
+
+            if ($igual && (time() - (int) ($previo['at'] ?? 0)) < 3600) {
+                return;
+            }
+
+            $this->cache->save(
+                (string) json_encode(['at' => time(), 'cookies' => $cookies, 'vary' => $vary]),
+                Diagnostics::CACHE_BLOCKERS_KEY,
+                ['TE_CDN_DIAGNOSTICS'],
+                self::CACHE_BLOCKERS_TTL
+            );
+        } catch (\Exception $e) {
+            // A diagnostic must never be the reason a page fails to render.
+            $this->logger->debug('TransparentEdge: cache-blocker probe failed: ' . $e->getMessage());
+        }
+    }
+
     private function applyCacheControlHeader(HttpResponse $response): void
     {
         // If X-Magento-Cache-Control exists, this page is cacheable by Magento's FPC.

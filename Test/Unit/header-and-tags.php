@@ -10,8 +10,10 @@ declare(strict_types=1);
 $repo = __DIR__ . '/../..';
 
 require __DIR__ . '/stubs.php';
+require __DIR__ . '/stubs-api.php';   // por el doble de CacheInterface
 require $repo . '/Model/TagResolver.php';     // clase real, sin dependencias
 require $repo . '/Model/CacheProfile.php';    // clase real
+require $repo . '/Model/Diagnostics.php';   // HeaderManager sella ahi su sonda
 require $repo . '/Model/HeaderManager.php';   // clase real
 
 use TransparentEdge\CDN\Model\CacheProfile;
@@ -50,8 +52,9 @@ function build(string $uri = '/', string $method = 'GET', string $accion = ''): 
         new \Magento\Framework\App\Request\Http($accion),
         $config
     );
-    $manager  = new HeaderManager($config, $resolver, new FakeRequest($method, $uri), $logger, $profile);
-    return [$manager, $config, $logger];
+    $cache    = new \TransparentEdge\CDN\Test\FakeCache();
+    $manager  = new HeaderManager($config, $resolver, new FakeRequest($method, $uri), $logger, $profile, $cache);
+    return [$manager, $config, $logger, $cache];
 }
 
 echo "=== A2: el tag FPC se traduce a te-fpc ===\n";
@@ -162,7 +165,8 @@ $m = new HeaderManager(
     $roto,
     new FakeRequest('GET', '/x'),
     $logger,
-    new CacheProfile(new HeaderScope(), new \Magento\Framework\App\Request\Http(''), $config)
+    new CacheProfile(new HeaderScope(), new \Magento\Framework\App\Request\Http(''), $config),
+    new \TransparentEdge\CDN\Test\FakeCache()
 );
 $res = new Response();
 $res->setHttpResponseCode(200);
@@ -183,7 +187,8 @@ $profile = new CacheProfile(
     new \Magento\Framework\App\Request\Http('cms_index_index'),
     $config
 );
-$m = new HeaderManager($config, new TagResolver(), new FakeRequest('GET', '/'), new FakeLogger(), $profile);
+$m = new HeaderManager($config, new TagResolver(), new FakeRequest('GET', '/'), new FakeLogger(), $profile,
+    new \TransparentEdge\CDN\Test\FakeCache());
 $res = new Response();
 $res->setHttpResponseCode(200);
 $res->setHeader('Content-Type', 'text/html');
@@ -204,7 +209,8 @@ $profile = new CacheProfile(
     new \Magento\Framework\App\Request\Http('catalog_category_view'),
     $config
 );
-$m = new HeaderManager($config, new TagResolver(), new FakeRequest('GET', '/c.html'), new FakeLogger(), $profile);
+$m = new HeaderManager($config, new TagResolver(), new FakeRequest('GET', '/c.html'), new FakeLogger(), $profile,
+    new \TransparentEdge\CDN\Test\FakeCache());
 $res = new Response();
 $res->setHttpResponseCode(200);
 $res->setHeader('Content-Type', 'text/html');
@@ -213,6 +219,73 @@ $m->applyHeaders($res);
 $cc = $res->getHeader('Cache-Control')->getFieldValue();
 printf("  categoria: %s\n", $cc);
 check('la categoria recibe su propio s-maxage=3600', str_contains($cc, 's-maxage=3600'), $cc);
+
+
+// ──────────────────────────────────────────────
+// Sonda de lo que impide cachear
+//
+// Existe por lo que tardamos en ver el fallo anterior: el plugin emitia
+// cabeceras publicas correctas y el edge no cacheaba nada, porque cada
+// respuesta llevaba un Set-Cookie. Desde dentro de Magento todo parecia
+// bien. Ahora el origen se da cuenta solo.
+// ──────────────────────────────────────────────
+
+echo "\n=== la sonda registra una respuesta cacheable limpia ===\n";
+[$m, $cfg, $log, $cache] = build('/');
+$res = new Response();
+$res->setHttpResponseCode(200);
+$res->setHeader('Content-Type', 'text/html');
+$res->setHeader('X-Magento-Cache-Control', 'max-age=86400, public');
+$res->setHeader('Vary', 'Accept-Encoding');
+$m->applyHeaders($res);
+$lectura = json_decode((string) $cache->load(\TransparentEdge\CDN\Model\Diagnostics::CACHE_BLOCKERS_KEY), true);
+check('queda lectura', is_array($lectura), var_export($lectura, true));
+check('sin cookies', ($lectura['cookies'] ?? null) === [], json_encode($lectura['cookies'] ?? null));
+check('con el Vary del origen', ($lectura['vary'] ?? '') === 'Accept-Encoding', $lectura['vary'] ?? '');
+
+echo "\n=== ve el Set-Cookie de la respuesta ===\n";
+[$m, $cfg, $log, $cache] = build('/');
+$res = new Response();
+$res->setHttpResponseCode(200);
+$res->setHeader('Content-Type', 'text/html');
+$res->setHeader('X-Magento-Cache-Control', 'max-age=86400, public');
+$res->setHeader('Set-Cookie', 'PHPSESSID=abc123def456; path=/; HttpOnly');
+$m->applyHeaders($res);
+$lectura = json_decode((string) $cache->load(\TransparentEdge\CDN\Model\Diagnostics::CACHE_BLOCKERS_KEY), true);
+check('detecta la cookie', ($lectura['cookies'] ?? []) === ['PHPSESSID'], json_encode($lectura['cookies'] ?? []));
+check('NO guarda el valor de la cookie',
+    strpos(json_encode($lectura), 'abc123def456') === false,
+    'un id de sesion es una credencial: la lectura se muestra en el panel y en /health');
+
+echo "\n=== una respuesta NO cacheable no deja lectura ===\n";
+// Un 500 o una ruta excluida salen por setNoCacheHeaders antes de la sonda:
+// ahi un Set-Cookie es correcto y no debe dar la alarma.
+[$m, $cfg, $log, $cache] = build('/');
+$res = new Response();
+$res->setHttpResponseCode(500);
+$res->setHeader('Content-Type', 'text/html');
+$res->setHeader('Set-Cookie', 'PHPSESSID=xyz; path=/');
+$m->applyHeaders($res);
+check('no hay lectura', $cache->load(\TransparentEdge\CDN\Model\Diagnostics::CACHE_BLOCKERS_KEY) === false);
+
+echo "\n=== no se escribe en cada peticion ===\n";
+[$m, $cfg, $log, $cache] = build('/');
+$hacer = function () use ($m) {
+    $r = new Response();
+    $r->setHttpResponseCode(200);
+    $r->setHeader('Content-Type', 'text/html');
+    $r->setHeader('X-Magento-Cache-Control', 'max-age=86400, public');
+    $r->setHeader('Vary', 'Accept-Encoding');
+    $m->applyHeaders($r);
+};
+$hacer();
+$primera = json_decode((string) $cache->load(\TransparentEdge\CDN\Model\Diagnostics::CACHE_BLOCKERS_KEY), true);
+$escrituras = $cache->escrituras ?? null;
+$hacer(); $hacer(); $hacer();
+$ultima = json_decode((string) $cache->load(\TransparentEdge\CDN\Model\Diagnostics::CACHE_BLOCKERS_KEY), true);
+check('la lectura no cambia si el cuadro es el mismo',
+    $primera['at'] === $ultima['at'], sprintf('%s -> %s', $primera['at'], $ultima['at']));
+
 
 echo "\n";
 printf("RESULTADO: %d correctas, %d fallos\n", $pass, $fail);
