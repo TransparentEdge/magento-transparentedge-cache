@@ -460,6 +460,16 @@ class VclGenerator
         $l[] = '        unset resp.http.Surrogate-Keys;';
         $l[] = '        unset resp.http.X-Magento-Tags;';
         $l[] = '';
+        $l[] = '        # The rest announce the stack or the cache state of the page.';
+        $l[] = '        # Individually harmless; together they tell an attacker which';
+        $l[] = '        # platform to aim at and which pages are served from cache. The';
+        $l[] = '        # Magento ones only appear with the core cache debug on, and';
+        $l[] = '        # unsetting a header that is not there costs nothing.';
+        $l[] = '        unset resp.http.X-Powered-By;';
+        $l[] = '        unset resp.http.X-Magento-Cache-Debug;';
+        $l[] = '        unset resp.http.X-Magento-Cache-Control;';
+        $l[] = '        unset resp.http.X-Magento-Vary;';
+        $l[] = '';
         $seguridad = $this->config->getSecurityHeaders();
         if ($seguridad !== []) {
             $l[] = '';

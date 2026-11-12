@@ -165,6 +165,14 @@ namespace {
     foreach ([
         'Surrogate-Keys'  => 'unset resp.http.Surrogate-Keys;',
         'X-Magento-Tags'  => 'unset resp.http.X-Magento-Tags;',
+        // Estas estaban a mano en el VCL de un cliente, no en el generado. Si
+        // el plugin no las trae, quitar el bloque hecho a mano para poner el
+        // generado es un retroceso silencioso: menos cabeceras ocultas que
+        // antes, y nadie se entera.
+        'X-Powered-By'            => 'unset resp.http.X-Powered-By;',
+        'X-Magento-Cache-Debug'   => 'unset resp.http.X-Magento-Cache-Debug;',
+        'X-Magento-Cache-Control' => 'unset resp.http.X-Magento-Cache-Control;',
+        'X-Magento-Vary'          => 'unset resp.http.X-Magento-Vary;',
     ] as $nombre => $aguja) {
         $check(sprintf('no se publica %s', $nombre), strpos($vcl, $aguja) !== false);
     }
