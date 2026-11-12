@@ -287,6 +287,71 @@ check('la lectura no cambia si el cuadro es el mismo',
     $primera['at'] === $ultima['at'], sprintf('%s -> %s', $primera['at'], $ultima['at']));
 
 
+// ──────────────────────────────────────────────
+// Neutralizacion del Vary
+//
+// Un solo "Vary: Cookie" colado por un modulo cuesta la cache entera: el
+// objeto se guarda, pero con una clave por visitante, y no se sirve dos
+// veces a nadie. Portado de get_safe_vary() del plugin de WordPress.
+// ──────────────────────────────────────────────
+
+function varyDe(array $cabeceras): string {
+    [$m] = build('/');
+    $r = new Response();
+    $r->setHttpResponseCode(200);
+    $r->setHeader('Content-Type', 'text/html');
+    $r->setHeader('X-Magento-Cache-Control', 'max-age=86400, public');
+    foreach ($cabeceras as $k => $v) { $r->setHeader($k, $v); }
+    $m->applyHeaders($r);
+    $h = $r->getHeader('Vary');
+    return $h ? $h->getFieldValue() : '';
+}
+
+echo "\n=== el Vary lo decidimos nosotros ===\n";
+check('sin Vary previo, sale el seguro', varyDe([]) === 'Accept-Encoding', varyDe([]));
+check('Cookie se elimina', varyDe(['Vary' => 'Cookie']) === 'Accept-Encoding', varyDe(['Vary' => 'Cookie']));
+check('User-Agent se elimina', varyDe(['Vary' => 'User-Agent']) === 'Accept-Encoding', varyDe(['Vary' => 'User-Agent']));
+check('el comodin se elimina', varyDe(['Vary' => '*']) === 'Accept-Encoding', varyDe(['Vary' => '*']));
+check('no importan las mayusculas',
+    varyDe(['Vary' => 'cookie, USER-AGENT']) === 'Accept-Encoding', varyDe(['Vary' => 'cookie, USER-AGENT']));
+
+echo "\n=== se fusiona, no se machaca ===\n";
+// Un token ajeno legitimo no se tira: tirarlo serviria la variante
+// equivocada a alguien.
+check('conserva un token ajeno legitimo',
+    varyDe(['Vary' => 'X-Device']) === 'Accept-Encoding, X-Device', varyDe(['Vary' => 'X-Device']));
+check('conserva el bueno y quita el malo',
+    varyDe(['Vary' => 'X-Device, Cookie, Accept-Language']) === 'Accept-Encoding, X-Device, Accept-Language',
+    varyDe(['Vary' => 'X-Device, Cookie, Accept-Language']));
+check('no duplica Accept-Encoding',
+    varyDe(['Vary' => 'Accept-Encoding']) === 'Accept-Encoding', varyDe(['Vary' => 'Accept-Encoding']));
+
+echo "\n=== una respuesta NO cacheable se deja intacta ===\n";
+// Una pagina personalizada puede necesitar variar por Cookie de verdad.
+[$m] = build('/');
+$r = new Response();
+$r->setHttpResponseCode(500);
+$r->setHeader('Content-Type', 'text/html');
+$r->setHeader('Vary', 'Cookie');
+$m->applyHeaders($r);
+check('conserva su Vary: Cookie', $r->getHeader('Vary')->getFieldValue() === 'Cookie',
+    $r->getHeader('Vary')->getFieldValue());
+
+echo "\n=== la sonda ve el Vary ANTES de neutralizarlo ===\n";
+// Si mirase despues, nunca informaria de que un modulo lo intenta.
+[$m, $cfg, $log, $cache] = build('/');
+$r = new Response();
+$r->setHttpResponseCode(200);
+$r->setHeader('Content-Type', 'text/html');
+$r->setHeader('X-Magento-Cache-Control', 'max-age=86400, public');
+$r->setHeader('Vary', 'Cookie');
+$m->applyHeaders($r);
+$lectura = json_decode((string) $cache->load(\TransparentEdge\CDN\Model\Diagnostics::CACHE_BLOCKERS_KEY), true);
+check('la lectura registra el Cookie', str_contains((string) ($lectura['vary'] ?? ''), 'Cookie'),
+    $lectura['vary'] ?? '');
+check('pero la respuesta sale limpia', $r->getHeader('Vary')->getFieldValue() === 'Accept-Encoding',
+    $r->getHeader('Vary')->getFieldValue());
+
 echo "\n";
 printf("RESULTADO: %d correctas, %d fallos\n", $pass, $fail);
 exit($fail === 0 ? 0 : 1);

@@ -356,12 +356,14 @@ class Diagnostics
             return [
                 'id'       => 'cache_blockers',
                 'severity' => self::SEVERITY_WARNING,
-                'title'    => (string) __('Cacheable pages vary on %1', implode(', ', $varyMal)),
+                'title'    => (string) __('Something is adding Vary: %1 to cacheable pages', implode(', ', $varyMal)),
                 'detail'   => (string) __(
-                    'The response carries Vary: %1. The edge stores the page, but keyed on a value that '
-                    . 'differs for nearly every visitor, so a stored copy is almost never reused. Magento '
-                    . 'sends a safe Vary on its own, so something else is adding to it — usually a '
-                    . 'third-party module.',
+                    'A cacheable page was built with Vary: %1. Varying on that keys the cached object '
+                    . 'on a value that differs for nearly every visitor, so a stored copy is almost '
+                    . 'never served twice. The plugin strips it before the response leaves, so caching '
+                    . 'is not broken — but Magento does not do this by itself, so a module on this '
+                    . 'installation is doing it, and it may be doing the same on routes the plugin '
+                    . 'does not handle. Worth finding.',
                     $vary
                 ),
                 'fix'      => '',

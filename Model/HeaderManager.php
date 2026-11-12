@@ -57,6 +57,35 @@ class HeaderManager
     private const CACHE_BLOCKERS_TTL = 172800;
 
     /**
+     * The only token an anonymous cacheable page needs to vary on.
+     *
+     * Magento sends this by itself today. The list exists so that what we
+     * send is decided here and not by whatever the last module to touch the
+     * header happened to want.
+     */
+    private const VARY_BASE = ['Accept-Encoding'];
+
+    /**
+     * Never varied on, whoever asks.
+     *
+     * Each of these takes a value that is close to unique per visitor, so the
+     * edge ends up storing one copy of the page per client and serving almost
+     * none of them twice. `*` tells caches the response is not reusable at
+     * all. None of them maps to a real anonymous variant: what legitimately
+     * varies a Magento page (store, currency, customer group) travels in the
+     * X-Magento-Vary cookie, which the VCL turns into the edge's own key.
+     */
+    private const VARY_FORBIDDEN = ['cookie', 'user-agent', '*'];
+
+    /**
+     * header_register_callback takes one callback per request, so registering
+     * twice would silently drop the first.
+     *
+     * @var bool
+     */
+    private bool $varyCallbackSet = false;
+
+    /**
      * Static file extensions that should get static TTLs
      */
     private const STATIC_EXTENSIONS = [
@@ -184,8 +213,13 @@ class HeaderManager
         $this->applyCacheControlHeader($response);
 
         // We have just declared this response cacheable. Look at what it is
-        // actually carrying before it leaves.
+        // actually carrying before it leaves — before the next line tidies
+        // the Vary, so Diagnostics still reports that something was adding a
+        // bad token rather than quietly covering for it.
         $this->probeCacheBlockers($response);
+
+        // Decide the Vary ourselves instead of inheriting it.
+        $this->applySafeVary($response);
 
         // Debug header
         if ($this->config->isDebugMode()) {
@@ -294,6 +328,106 @@ class HeaderManager
      *
      * @param HttpResponse $response
      */
+    /**
+     * Keep the tokens worth varying on and drop the ones that break caching.
+     *
+     * Merges rather than replaces: a module may have added a token that is
+     * perfectly reasonable, and throwing it away would serve the wrong
+     * variant to somebody. Only the forbidden ones are removed.
+     *
+     * @param  array<string> $tokens
+     * @return array<string>
+     */
+    private static function safeVaryTokens(array $tokens): array
+    {
+        $salida = self::VARY_BASE;
+
+        foreach ($tokens as $t) {
+            $t = trim((string) $t);
+            if ($t === '' || in_array(strtolower($t), self::VARY_FORBIDDEN, true)) {
+                continue;
+            }
+            $salida[] = $t;
+        }
+
+        return array_values(array_unique($salida));
+    }
+
+    /**
+     * Every Vary token already set, from both places one can come from.
+     *
+     * @return array<string>
+     */
+    private static function currentVaryTokens(?HttpResponse $response = null): array
+    {
+        $crudo = [];
+
+        if (function_exists('headers_list')) {
+            foreach (headers_list() as $linea) {
+                if (stripos($linea, 'vary:') === 0) {
+                    $crudo[] = trim(substr($linea, 5));
+                }
+            }
+        }
+
+        if ($response !== null) {
+            $v = $response->getHeader('Vary');
+            if ($v) {
+                $crudo[] = (string) $v->getFieldValue();
+            }
+        }
+
+        $tokens = [];
+        foreach ($crudo as $valor) {
+            foreach (explode(',', $valor) as $t) {
+                $tokens[] = $t;
+            }
+        }
+
+        return $tokens;
+    }
+
+    /**
+     * Put a safe Vary on a cacheable response, and keep it that way.
+     *
+     * Setting it here is not enough on its own. Magento, a theme or a
+     * third-party module can touch the header after this runs and before the
+     * response is sent, and a single stray `Vary: Cookie` added at that point
+     * costs the whole page cache — the object is stored, keyed per visitor,
+     * and served to nobody twice.
+     *
+     * So the value is also re-asserted from a header_register_callback, which
+     * PHP runs at the moment headers go out, after everything else has had
+     * its turn. The callback recomputes from whatever is set by then rather
+     * than replaying the value captured here, so a legitimate token added
+     * late still survives.
+     *
+     * Only cacheable responses reach this: a passed or personalized response
+     * is left exactly as its own code wrote it.
+     */
+    private function applySafeVary(HttpResponse $response): void
+    {
+        try {
+            $vary = self::safeVaryTokens(self::currentVaryTokens($response));
+            $response->setHeader('Vary', implode(', ', $vary), true);
+
+            if ($this->varyCallbackSet || !function_exists('header_register_callback')) {
+                return;
+            }
+            $this->varyCallbackSet = true;
+
+            header_register_callback(static function (): void {
+                if (!function_exists('header')) {
+                    return;
+                }
+                $vary = self::safeVaryTokens(self::currentVaryTokens());
+                header('Vary: ' . implode(', ', $vary), true);
+            });
+        } catch (\Exception $e) {
+            $this->logger->debug('TransparentEdge: could not normalise Vary: ' . $e->getMessage());
+        }
+    }
+
     /**
      * Record what a cacheable response is carrying, for Diagnostics to read.
      *
