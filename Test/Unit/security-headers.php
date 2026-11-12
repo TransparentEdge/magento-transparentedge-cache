@@ -124,6 +124,38 @@ namespace {
         strpos($h['Strict-Transport-Security'] ?? '', '; preload') !== false,
         $h['Strict-Transport-Security'] ?? '');
 
+    echo "\n=== Cross-Origin-Opener-Policy ===\n";
+    check('apagada no sale', !isset(cfg([])->getSecurityHeaders()['Cross-Origin-Opener-Policy']));
+    $h = cfg([$P . 'coop' => 1])->getSecurityHeaders();
+    // allow-popups y no same-origin: same-origin corta el enlace con la
+    // ventana que abre una pasarela de pago o un login social.
+    check('por defecto permite popups',
+        ($h['Cross-Origin-Opener-Policy'] ?? '') === 'same-origin-allow-popups',
+        $h['Cross-Origin-Opener-Policy'] ?? '');
+    $h = cfg([$P . 'coop' => 1, $P . 'coop_value' => 'same-origin'])->getSecurityHeaders();
+    check('se respeta el valor configurado',
+        ($h['Cross-Origin-Opener-Policy'] ?? '') === 'same-origin');
+
+    echo "\n=== ninguna de las de E11 se queda fuera ===\n";
+    // El bloque escrito a mano en el VCL de un cliente traia estas siete.
+    // Si el plugin no sabe generar alguna, sustituir ese bloque por el
+    // generado deja el sitio con menos proteccion que antes, y en silencio.
+    $todas = cfg([
+        $P . 'nosniff' => 1, $P . 'frame_options' => 1, $P . 'referrer_policy' => 1,
+        $P . 'permissions_policy' => 1, $P . 'permissions_policy_value' => 'camera=()',
+        $P . 'coop' => 1,
+        $P . 'hsts' => 1, $P . 'hsts_subdomains' => 1, $P . 'hsts_preload' => 1,
+        $P . 'csp' => 1, $P . 'csp_value' => "default-src 'self'",
+    ])->getSecurityHeaders();
+    foreach ([
+        'Strict-Transport-Security', 'X-Content-Type-Options', 'X-Frame-Options',
+        'Referrer-Policy', 'Permissions-Policy', 'Cross-Origin-Opener-Policy',
+        'Content-Security-Policy-Report-Only',
+    ] as $nombre) {
+        check(sprintf('el plugin sabe generar %s', $nombre), isset($todas[$nombre]),
+            implode(', ', array_keys($todas)));
+    }
+
     echo "\n=== CSP: en modo informe salvo que se pida lo contrario ===\n";
     // Una politica ligeramente mal deja la tienda sin JavaScript. En modo
     // informe solo llena un log.

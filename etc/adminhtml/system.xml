@@ -531,6 +531,20 @@
                     <depends><field id="permissions_policy">1</field></depends>
                 </field>
 
+                <field id="coop" translate="label comment" type="select" sortOrder="45"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Cross-Origin-Opener-Policy</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <config_path>transparentedge/security/coop</config_path>
+                    <comment>Isolates the browsing context so another site cannot keep a handle on your window. Off by default: check first that no payment gateway or social login of yours opens a popup that talks back.</comment>
+                </field>
+                <field id="coop_value" translate="label" type="text" sortOrder="46"
+                       showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Cross-Origin-Opener-Policy value</label>
+                    <config_path>transparentedge/security/coop_value</config_path>
+                    <depends><field id="coop">1</field></depends>
+                </field>
+
                 <field id="hsts" translate="label comment" type="select" sortOrder="50"
                        showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Strict-Transport-Security (HSTS)</label>

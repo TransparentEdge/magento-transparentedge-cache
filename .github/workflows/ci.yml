@@ -60,5 +60,8 @@ jobs:
       - name: Huella del codigo desplegado
         run: php Test/Unit/fingerprint.php
 
+      - name: El log no puede tumbar lo que observa
+        run: php Test/Unit/safe-logger.php
+
       - name: composer validate
         run: composer validate --no-check-publish --no-check-lock

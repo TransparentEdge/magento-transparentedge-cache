@@ -244,8 +244,16 @@
         processor starting a session in its constructor is enough to break
         every request that touches this logger outside a bootstrapped area.
     -->
+    <!--
+        El tipo base es SafeLogger y no Monolog a propósito: un fallo al
+        escribir el log (permisos, disco lleno) lanzaba una excepción que
+        subía hasta la operación en curso y la abortaba — una purga que no
+        se hace porque no se pudo anotar que se iba a hacer. SafeLogger se
+        la traga. Como los trece puntos de inyección de abajo apuntan a este
+        virtualType, cambiar esta línea los arregla todos.
+    -->
     <virtualType name="TransparentEdge\CDN\Model\Logger"
-                 type="Magento\Framework\Logger\Monolog">
+                 type="TransparentEdge\CDN\Model\SafeLogger">
         <arguments>
             <argument name="name" xsi:type="string">transparentedge</argument>
             <argument name="handlers" xsi:type="array">

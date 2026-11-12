@@ -116,6 +116,8 @@
                 <hsts_preload>0</hsts_preload>
                 <permissions_policy>0</permissions_policy>
                 <permissions_policy_value>geolocation=(), microphone=(), camera=()</permissions_policy_value>
+                <coop>0</coop>
+                <coop_value>same-origin-allow-popups</coop_value>
                 <csp>0</csp>
                 <csp_enforce>0</csp_enforce>
                 <csp_value/>

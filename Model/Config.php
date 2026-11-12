@@ -291,6 +291,14 @@ class Config
                 $h['Permissions-Policy'] = $v;
             }
         }
+        if ($on('coop')) {
+            // same-origin-allow-popups rather than same-origin: a payment
+            // gateway or a social login that opens a popup still needs to
+            // talk back to the window that opened it, and same-origin cuts
+            // that link. The stricter value belongs to a site that has
+            // checked it has no such popup.
+            $h['Cross-Origin-Opener-Policy'] = $val('coop_value', 'same-origin-allow-popups');
+        }
         if ($on('hsts')) {
             $max = (int) $val('hsts_max_age', '31536000');
             $v   = 'max-age=' . max(0, $max);
