@@ -87,6 +87,16 @@ class Diagnostics
      */
     public const SPECULATION_CONFLICT_KEY = 'te_cdn_speculation_conflict';
 
+    /**
+     * Cookies Magento sets on ordinary pages by itself.
+     *
+     * Seeing one of these on a cacheable response is the normal state of a
+     * working Magento, not a finding. Anything else on the list is somebody
+     * else's, and worth saying out loud.
+     */
+    private const EXPECTED_COOKIES = ['PHPSESSID', 'FORM_KEY', 'MAGE-CACHE-SESSID', 'MAGE-MESSAGES',
+                                      'PRIVATE_CONTENT_VERSION', 'SECTION_DATA_IDS', 'X-MAGENTO-VARY'];
+
     private const PATH_CACHING_APPLICATION = 'system/full_page_cache/caching_application';
     private const PATH_FPC_TTL             = 'system/full_page_cache/ttl';
 
@@ -342,20 +352,51 @@ class Diagnostics
             }
         ));
 
-        if ($cookies !== []) {
+        // Magento gives every visitor a session, anonymous ones included, so
+        // a cacheable page leaving with PHPSESSID is normal and says nothing
+        // about whether caching works. What decides that is whether the
+        // DEPLOYED VCL strips it, and the origin cannot see the deployed VCL.
+        //
+        // This was a critical at first, which was wrong: it would have fired
+        // on every correctly configured Magento there is, and a critical that
+        // is always on teaches people to ignore criticals.
+        $esperadas = array_filter($cookies, static function ($c) {
+            return in_array(strtoupper($c), self::EXPECTED_COOKIES, true);
+        });
+        $extranas = array_values(array_diff($cookies, $esperadas));
+
+        if ($extranas !== []) {
             return [
                 'id'       => 'cache_blockers',
-                'severity' => self::SEVERITY_CRITICAL,
-                'title'    => (string) __('Cacheable pages are sending cookies, so nothing is cached'),
+                'severity' => self::SEVERITY_WARNING,
+                'title'    => (string) __('Cacheable pages are setting cookies that will not reach visitors: %1', implode(', ', $extranas)),
                 'detail'   => (string) __(
-                    'A page that should be cached left this server with a Set-Cookie for %1. The CDN '
-                    . 'never stores a response that sets a cookie, so every visitor is served from here '
-                    . 'instead of from the edge — silently, because the page itself is correct. The VCL '
-                    . 'the plugin generates strips these on cacheable responses; this usually means the '
-                    . 'deployed VCL predates that, or was edited.',
-                    implode(', ', $cookies)
+                    'A cacheable page left this server setting %1. The VCL strips every Set-Cookie from '
+                    . 'responses it caches — it has to, because the CDN will not store a response that '
+                    . 'sets a cookie — so whatever puts these there will not work for anyone served from '
+                    . 'the edge, which is most visitors. Either the feature behind them belongs on a '
+                    . 'page that is not cached, or it needs to set them from JavaScript instead.',
+                    implode(', ', $extranas)
                 ),
-                'fix'      => 'bin/magento transparentedge:status --vcl   # regenerate and redeploy the VCL',
+                'fix'      => '',
+            ];
+        }
+
+        if ($esperadas !== []) {
+            return [
+                'id'       => 'cache_blockers',
+                'severity' => self::SEVERITY_WARNING,
+                'title'    => (string) __('Check that your deployed VCL strips Set-Cookie'),
+                'detail'   => (string) __(
+                    'Cacheable pages leave this server with %1, which is normal: Magento gives a session '
+                    . 'to anonymous visitors too. The CDN does not store a response that sets a cookie, '
+                    . 'so the VCL has to strip it — the one this plugin generates does, on cacheable '
+                    . 'responses only. From here there is no way to see which VCL is actually deployed, '
+                    . 'so if caching looks wrong, regenerate it and compare with what is in the panel. '
+                    . 'A VCL generated before v2.1 does not strip it, and nothing will be cached.',
+                    implode(', ', $esperadas)
+                ),
+                'fix'      => 'bin/magento transparentedge:status --vcl',
             ];
         }
 

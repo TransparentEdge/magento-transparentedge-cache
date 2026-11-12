@@ -186,12 +186,44 @@ echo "\n=== sin lectura, no se opina ===\n";
 check('el chequeo no aparece', find(build(2)->run(), 'cache_blockers') === null,
     'sin datos no se inventa un veredicto');
 
-echo "\n=== una cookie en una pagina cacheable es critico ===\n";
-$c = find(build(2, true, true, 'fresco', true, ['cookies' => ['PHPSESSID'], 'vary' => 'Accept-Encoding'])->run(), 'cache_blockers');
-check('es critico', $c['severity'] === Diagnostics::SEVERITY_CRITICAL, $c['severity'] ?? '');
-check('nombra la cookie', str_contains($c['detail'], 'PHPSESSID'), $c['detail'] ?? '');
-check('y tumba el estado general',
-    build(2, true, true, 'fresco', true, ['cookies' => ['PHPSESSID'], 'vary' => ''])->hasCriticalProblem() === true);
+echo "\n=== PHPSESSID NO es un fallo: es lo normal en Magento ===\n";
+// Magento da sesion tambien a los anonimos, asi que el origen SIEMPRE
+// manda PHPSESSID. Si esto fuese critico, saltaria en toda instalacion
+// correctamente configurada, y un critico siempre encendido ensena a
+// ignorar los criticos. Lo que decide si se cachea es si el VCL
+// DESPLEGADO lo limpia, y eso el origen no puede verlo.
+$conPhp = ['cookies' => ['PHPSESSID'], 'vary' => 'Accept-Encoding'];
+$c = find(build(2, true, true, 'fresco', true, $conPhp)->run(), 'cache_blockers');
+check('es aviso, no critico', $c['severity'] === Diagnostics::SEVERITY_WARNING, $c['severity'] ?? '');
+check('NO tumba el estado general',
+    build(2, true, true, 'fresco', true, $conPhp)->hasCriticalProblem() === false,
+    'un Magento sano no puede salir en critico');
+check('remite al VCL desplegado, que es lo accionable',
+    str_contains($c['detail'], 'deployed') || str_contains($c['title'], 'deployed VCL'), $c['title'] ?? '');
+check('no afirma que no se cachee nada',
+    !str_contains(strtolower($c['title']), 'nothing is cached'), $c['title'] ?? '');
+
+// Las demas cookies que pone Magento por su cuenta tampoco son hallazgos.
+foreach (['form_key', 'mage-cache-sessid', 'X-Magento-Vary'] as $propia) {
+    $c = find(build(2, true, true, 'fresco', true, ['cookies' => [$propia], 'vary' => ''])->run(), 'cache_blockers');
+    check(sprintf('%s se reconoce como propia de Magento', $propia),
+        $c['severity'] === Diagnostics::SEVERITY_WARNING
+        && str_contains($c['title'], 'deployed VCL'), $c['title'] ?? '');
+}
+
+echo "\n=== una cookie ajena SI es informacion ===\n";
+// El VCL limpia todas las Set-Cookie de las respuestas que cachea, asi
+// que lo que sea que la pone no funcionara para los servidos desde edge.
+$c = find(build(2, true, true, 'fresco', true, ['cookies' => ['ab_test_bucket'], 'vary' => ''])->run(), 'cache_blockers');
+check('avisa', $c['severity'] === Diagnostics::SEVERITY_WARNING, $c['severity'] ?? '');
+check('la nombra', str_contains($c['title'], 'ab_test_bucket'), $c['title'] ?? '');
+check('explica que no llegara al visitante',
+    str_contains($c['detail'], 'will not work') || str_contains($c['title'], 'not reach'), '');
+// Y si vienen mezcladas, manda la ajena: es la que trae informacion.
+$c = find(build(2, true, true, 'fresco', true,
+    ['cookies' => ['PHPSESSID', 'ab_test_bucket'], 'vary' => ''])->run(), 'cache_blockers');
+check('la ajena tiene prioridad sobre la propia',
+    str_contains($c['title'], 'ab_test_bucket') && !str_contains($c['title'], 'PHPSESSID'), $c['title'] ?? '');
 
 echo "\n=== variar por Cookie es un aviso, no un critico ===\n";
 // El objeto SI se cachea; lo que pasa es que se guarda una copia por
