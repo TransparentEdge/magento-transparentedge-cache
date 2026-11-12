@@ -50,9 +50,12 @@ class SpeculationInlineOptimizer
         // the origin for pages nobody asked for, and the two sets will
         // disagree about what to exclude.
         $conflicto = $this->detectConflict($html);
+        // Recorded either way. An absent reading has to mean "no page has
+        // been rendered since the last flush" and nothing else — if it also
+        // meant "no conflict", a check that never ran would be
+        // indistinguishable from one that passed.
+        $this->recordConflict($conflicto ?? '');
         if ($conflicto !== null) {
-            $this->recordConflict($conflicto);
-
             return $html;
         }
 

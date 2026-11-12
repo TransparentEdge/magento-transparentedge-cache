@@ -58,19 +58,37 @@ class StatusCommand extends Command
         // Environment checks first: a setting outside this module can stop the
         // CDN caching anything at all, and everything below would still look
         // perfectly healthy. Lead with the bad news.
-        $problems = $this->config->isEnabled() ? $this->diagnostics->getProblems() : [];
-        if ($problems !== []) {
-            $this->printSection($output, 'Problems found');
-            foreach ($problems as $problem) {
-                $isCritical = $problem['severity'] === Diagnostics::SEVERITY_CRITICAL;
-                $output->writeln(($isCritical ? '  <e>✗ ' : '  <comment>! ') . $problem['title']
-                    . ($isCritical ? '</e>' : '</comment>'));
-                $output->writeln('    ' . wordwrap($problem['detail'], 70, "\n    ", false));
-                if ($problem['fix'] !== '') {
-                    $output->writeln('    <info>' . $problem['fix'] . '</info>');
+        // Every check, not only the failing ones.
+        //
+        // This used to print problems and stay silent otherwise, which made
+        // three different situations look identical: all good, nothing
+        // measured yet, and the checks not running at all. That ambiguity is
+        // exactly how the original fault hid for weeks — the plugin said
+        // nothing and we read it as healthy.
+        $checks = $this->config->isEnabled() ? $this->diagnostics->run() : [];
+        if ($checks !== []) {
+            $this->printSection($output, 'Environment checks');
+            foreach ($checks as $check) {
+                $marca = [
+                    Diagnostics::SEVERITY_CRITICAL => ['<e>', '✗', '</e>'],
+                    Diagnostics::SEVERITY_WARNING  => ['<comment>', '!', '</comment>'],
+                    Diagnostics::SEVERITY_UNKNOWN  => ['<comment>', '?', '</comment>'],
+                    Diagnostics::SEVERITY_OK       => ['<info>', '✓', '</info>'],
+                ][$check['severity']] ?? ['', '-', ''];
+
+                $output->writeln(sprintf('  %s%s %s%s', $marca[0], $marca[1], $check['title'], $marca[2]));
+
+                // The detail is the useful part when something is off, and
+                // noise when everything is fine.
+                if ($check['severity'] !== Diagnostics::SEVERITY_OK) {
+                    $output->writeln('    ' . wordwrap($check['detail'], 70, "\n    ", false));
+                    if ($check['fix'] !== '') {
+                        $output->writeln('    <info>' . $check['fix'] . '</info>');
+                    }
+                    $output->writeln('');
                 }
-                $output->writeln('');
             }
+            $output->writeln('');
         }
 
         // General

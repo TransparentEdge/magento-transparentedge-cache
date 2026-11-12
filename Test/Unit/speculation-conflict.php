@@ -112,7 +112,9 @@ namespace {
         $r = $cache->load(\TransparentEdge\CDN\Model\Diagnostics::SPECULATION_CONFLICT_KEY);
         if (!is_string($r)) { return null; }
         $d = json_decode($r, true);
-        return $d['what'] ?? null;
+        // '' = se miro y no hay conflicto; null = no se miro.
+        $q = $d['what'] ?? '';
+        return $q === '' ? null : $q;
     }
 
     $pagina = function (string $extra): string {
@@ -175,7 +177,18 @@ namespace {
     [$o, $cache] = hacer();
     $html = $pagina('<script src="/js/quicklink.umd.js"></script>');
     $o->process($html); $o->process($html); $o->process($html);
-    check('una sola escritura', $cache->escrituras === 1, (string) $cache->escrituras);
+    check('una sola escritura con conflicto', $cache->escrituras === 1, (string) $cache->escrituras);
+
+    // Tambien se registra cuando NO hay conflicto, para que "sin lectura"
+    // signifique solo "no se ha renderizado nada", y no dos cosas a la vez.
+    [$o, $cache] = hacer();
+    $limpia = $pagina('');
+    $o->process($limpia);
+    $r = json_decode((string) $cache->load(\TransparentEdge\CDN\Model\Diagnostics::SPECULATION_CONFLICT_KEY), true);
+    check('una pagina limpia deja constancia', is_array($r) && ($r['what'] ?? null) === '',
+        json_encode($r));
+    $o->process($limpia); $o->process($limpia);
+    check('y tampoco escribe en cada render', $cache->escrituras === 1, (string) $cache->escrituras);
 
     echo "\n";
     printf("RESULTADO: %d correctas, %d fallos\n", $pass, $fail);

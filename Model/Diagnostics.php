@@ -34,6 +34,17 @@ class Diagnostics
     public const SEVERITY_OK       = 'ok';
 
     /**
+     * Checked nothing, because there was nothing to check yet.
+     *
+     * This exists because of how the original problem hid. Some checks read
+     * a reading taken from real traffic, and when that reading is missing
+     * the honest answer is "I don't know", not silence — silence is what a
+     * passing check looks like. The plugin said nothing for weeks and we
+     * read it as everything being fine.
+     */
+    public const SEVERITY_UNKNOWN  = 'unknown';
+
+    /**
      * Magento's own values for system/full_page_cache/caching_application.
      *
      * Mirrored here rather than importing Magento\PageCache\Model\Config so
@@ -145,9 +156,11 @@ class Diagnostics
      */
     public function getProblems(): array
     {
+        // "Not measured yet" is not a problem: it would mean the admin
+        // dashboard raises a flag after every cache flush, every time.
         return array_values(array_filter(
             $this->run(),
-            static fn(array $c): bool => $c['severity'] !== self::SEVERITY_OK
+            static fn(array $c): bool => !in_array($c['severity'], [self::SEVERITY_OK, self::SEVERITY_UNKNOWN], true)
         ));
     }
 
@@ -343,7 +356,17 @@ class Diagnostics
     {
         $r = $this->loadCacheBlockers();
         if ($r === [] || (time() - (int) ($r['at'] ?? 0)) > self::CACHE_BLOCKERS_STALE_AFTER) {
-            return null;
+            return [
+                'id'       => 'cache_blockers',
+                'severity' => self::SEVERITY_UNKNOWN,
+                'title'    => (string) __('Not checked yet: what cacheable pages are sending'),
+                'detail'   => (string) __(
+                    'This reading is taken while Magento renders a cacheable page, and there has not '
+                    . 'been one since the cache was last flushed. Request any page that is not already '
+                    . 'cached at the edge and it will fill in.'
+                ),
+                'fix'      => '',
+            ];
         }
 
         $cookies = array_filter(array_map('strval', (array) ($r['cookies'] ?? [])));
@@ -450,9 +473,30 @@ class Diagnostics
         }
 
         $r = $this->loadJson(self::SPECULATION_CONFLICT_KEY);
+        $viejo = (time() - (int) ($r['at'] ?? 0)) > self::CACHE_BLOCKERS_STALE_AFTER;
+
+        if ($r === [] || $viejo) {
+            return [
+                'id'       => 'speculation_conflict',
+                'severity' => self::SEVERITY_UNKNOWN,
+                'title'    => (string) __('Not checked yet: whether anything else is prefetching'),
+                'detail'   => (string) __(
+                    'Checked while a page is rendered, and none has been since the cache was last '
+                    . 'flushed.'
+                ),
+                'fix'      => '',
+            ];
+        }
+
         $que = (string) ($r['what'] ?? '');
-        if ($que === '' || (time() - (int) ($r['at'] ?? 0)) > self::CACHE_BLOCKERS_STALE_AFTER) {
-            return null;
+        if ($que === '') {
+            return [
+                'id'       => 'speculation_conflict',
+                'severity' => self::SEVERITY_OK,
+                'title'    => (string) __('Speculation rules: nothing else is prefetching'),
+                'detail'   => (string) __('The plugin is the only thing telling the browser what to prefetch.'),
+                'fix'      => '',
+            ];
         }
 
         return [

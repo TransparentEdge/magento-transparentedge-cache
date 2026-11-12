@@ -136,7 +136,7 @@ foreach ($d->run() as $c) {
     $faltan = array_diff(['id', 'severity', 'title', 'detail', 'fix'], array_keys($c));
     check("'{$c['id']}' trae todas las claves", $faltan === [], implode(',', $faltan));
     check("'{$c['id']}' tiene severidad conocida",
-        in_array($c['severity'], [Diagnostics::SEVERITY_OK, Diagnostics::SEVERITY_WARNING, Diagnostics::SEVERITY_CRITICAL], true),
+        in_array($c['severity'], [Diagnostics::SEVERITY_OK, Diagnostics::SEVERITY_WARNING, Diagnostics::SEVERITY_CRITICAL, Diagnostics::SEVERITY_UNKNOWN], true),
         $c['severity']);
     check("'{$c['id']}' tiene titulo", trim($c['title']) !== '');
 }
@@ -189,8 +189,14 @@ check('el chequeo desaparece',
 // ──────────────────────────────────────────────
 
 echo "\n=== sin lectura, no se opina ===\n";
-check('el chequeo no aparece', find(build(2)->run(), 'cache_blockers') === null,
-    'sin datos no se inventa un veredicto');
+// "No lo he mirado" tiene que verse distinto de "lo he mirado y esta bien":
+// que se vieran igual es como se nos escondio el fallo original semanas.
+$c = find(build(2)->run(), 'cache_blockers');
+check('el chequeo aparece como sin medir', $c['severity'] === Diagnostics::SEVERITY_UNKNOWN,
+    $c['severity'] ?? '(ausente)');
+check('y NO cuenta como problema',
+    find(build(2)->getProblems(), 'cache_blockers') === null,
+    'si contara, saltaria tras cada cache:flush');
 
 echo "\n=== PHPSESSID NO es un fallo: es lo normal en Magento ===\n";
 // Magento da sesion tambien a los anonimos, asi que el origen SIEMPRE
@@ -248,15 +254,19 @@ check('no sale en la lista de problemas',
 
 echo "\n=== una lectura vieja no habla del sitio de hoy ===\n";
 $viejo = ['cookies' => ['PHPSESSID'], 'vary' => '', 'at' => time() - Diagnostics::CACHE_BLOCKERS_STALE_AFTER - 60];
-check('se descarta', find(build(2, true, true, 'fresco', true, $viejo)->run(), 'cache_blockers') === null,
-    'un fallo de hace dos dias no es un fallo de ahora');
+$c = find(build(2, true, true, 'fresco', true, $viejo)->run(), 'cache_blockers');
+check('una lectura vieja vale lo mismo que ninguna',
+    $c['severity'] === Diagnostics::SEVERITY_UNKNOWN, $c['severity'] ?? '(ausente)');
 
 // ──────────────────────────────────────────────
 // Conflicto de speculation rules
 // ──────────────────────────────────────────────
 
 echo "\n=== sin conflicto, no se opina ===\n";
-check('no aparece', find(build(2)->run(), 'speculation_conflict') === null);
+$c = find(build(2)->run(), 'speculation_conflict');
+check('aparece como sin medir', $c['severity'] === Diagnostics::SEVERITY_UNKNOWN, $c['severity'] ?? '(ausente)');
+$c = find(build(2, true, true, 'fresco', true, null, ['what' => ''])->run(), 'speculation_conflict');
+check('con lectura limpia, OK', $c['severity'] === Diagnostics::SEVERITY_OK, $c['severity'] ?? '');
 
 echo "\n=== con conflicto, avisa y dice de quien ===\n";
 $c = find(build(2, true, true, 'fresco', true, null, ['what' => 'quicklink'])->run(), 'speculation_conflict');
@@ -268,8 +278,8 @@ check('no es critico: la tienda funciona',
 
 echo "\n=== una lectura vieja no cuenta ===\n";
 $viejo = ['what' => 'quicklink', 'at' => time() - Diagnostics::CACHE_BLOCKERS_STALE_AFTER - 60];
-check('se descarta',
-    find(build(2, true, true, 'fresco', true, null, $viejo)->run(), 'speculation_conflict') === null);
+$c = find(build(2, true, true, 'fresco', true, null, $viejo)->run(), 'speculation_conflict');
+check('vale lo mismo que ninguna', $c['severity'] === Diagnostics::SEVERITY_UNKNOWN, $c['severity'] ?? '');
 
 echo "\n";
 printf("RESULTADO: %d correctas, %d fallos\n", $pass, $fail);
