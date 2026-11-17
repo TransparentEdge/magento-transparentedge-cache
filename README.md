@@ -283,7 +283,9 @@ php Test/Unit/safe-logger.php
 
 ## Documentación
 
-La guía completa está en la carpeta [`doc/`](https://github.com/TransparentEdge/magento-transparentedge-cache/tree/main/doc) de este repositorio.
+La guía completa está en [`doc/guia.md`](doc/guia.md), y el PDF que se
+entrega a clientes se genera de ahí (ver [`doc/pdf/LEEME.md`](doc/pdf/LEEME.md)).
+**Si cambias algo del plugin que aparezca en la guía, actualízala en el mismo commit.**
 
 > `doc/` está marcada como `export-ignore`, por lo que **no viaja en el paquete que descarga Composer**. Consúltala en GitHub.
 
